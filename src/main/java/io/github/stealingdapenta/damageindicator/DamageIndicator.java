@@ -21,7 +21,6 @@ public class DamageIndicator extends JavaPlugin {
 
         Bukkit.getPluginManager().registerEvents(damageIndicatorListener, getInstance());
 
-
         this.pluginEnabledLog();
     }
 

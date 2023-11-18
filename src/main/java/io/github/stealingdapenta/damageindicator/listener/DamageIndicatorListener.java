@@ -5,14 +5,18 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -23,6 +27,25 @@ public class DamageIndicatorListener implements Listener {
     private static final TextColor FIRE = TextColor.color(200, 90, 25);
     private static final TextColor RANGED = TextColor.color(130, 70, 0);
     private static final TextColor OTHER = TextColor.color(130, 130, 30);
+    private static final String CUSTOM_NSK_TAG = "Why-are-we-here";
+
+    /**
+     * In case any armor stands get 'stuck'
+     * For example after a server crash, if any still alive
+     * we'll check all entities for our custom tag and remove if any match
+     *
+     * @param event whenever a chunk loads
+     */
+    @EventHandler
+    public void removeStuckArmorStands(ChunkLoadEvent event) {
+        for (Entity possibleArmorStand : event.getChunk().getEntities()) {
+            Boolean justToSuffer = possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN);
+            if (Objects.nonNull(justToSuffer) && justToSuffer) {
+                possibleArmorStand.remove();
+            }
+        }
+
+    }
 
     @EventHandler
     public void displayDamageIndicator(EntityDamageEvent event) {
@@ -38,21 +61,24 @@ public class DamageIndicatorListener implements Listener {
         this.animateArmorStand(initialLocation, damageDealt, textColor);
     }
 
-    private ArmorStand createArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
-        ArmorStand armorStand = initialLocation.getWorld().spawn(initialLocation, ArmorStand.class);
+    private NamespacedKey getCustomNamespacedKey() {
+        return new NamespacedKey(DamageIndicator.getInstance(), CUSTOM_NSK_TAG);
+    }
 
+    private ArmorStand createArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
         double hit = Math.round(damageDealt * 100.0) / 100.0;
 
-        armorStand.customName(Component.text(hit, textColor));
-        armorStand.setCustomNameVisible(true);
-        armorStand.setVisible(false);
-        armorStand.setCollidable(false);
-        armorStand.setInvulnerable(true);
-        armorStand.setMarker(true);
-        armorStand.setGravity(true);
-        armorStand.setSmall(true);
-
-        return armorStand;
+        return initialLocation.getWorld().spawn(initialLocation, ArmorStand.class, armorStand -> {
+            armorStand.customName(Component.text(hit, textColor));
+            armorStand.setCustomNameVisible(true);
+            armorStand.setVisible(false);
+            armorStand.setCollidable(false);
+            armorStand.setInvulnerable(true);
+            armorStand.setMarker(true);
+            armorStand.setGravity(true);
+            armorStand.setSmall(true);
+            armorStand.getPersistentDataContainer().set(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
+        });
     }
 
     private TextColor calculateColor(EntityDamageEvent.DamageCause cause) {
