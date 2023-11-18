@@ -4,10 +4,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.stealingdapenta</groupId>
-    <artifactId>idletd</artifactId>
+    <artifactId>damageindicator</artifactId>
     <version>0.0.2-SNAPSHOT</version>
-    <name>idletd</name>
-    <description>Minecraft idle tower defense game.</description>
+    <name>damageindicator</name>
+    <description>Minecraft Damage Indicator.</description>
 
     <properties>
         <java.version>17</java.version>
@@ -20,53 +20,14 @@
             <id>papermc-repo</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
-
-        <repository>
-            <id>sk89q-repo</id>
-            <url>https://maven.enginehub.org/repo/</url>
-        </repository>
     </repositories>
 
     <dependencies>
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.20.1-R0.1-SNAPSHOT</version>
+            <version>1.20.2-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.28</version>
-            <optional>true</optional>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.zaxxer/HikariCP -->
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>5.0.1</version>
-        </dependency>
-
-        <!-- JPA API -->
-        <dependency>
-            <groupId>javax.persistence</groupId>
-            <artifactId>javax.persistence-api</artifactId>
-            <version>2.2</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.sk89q.worldguard</groupId>
-            <artifactId>worldguard-bukkit</artifactId>
-            <version>7.0.10-SNAPSHOT</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.sk89q.worldedit</groupId>
-            <artifactId>worldedit-bukkit</artifactId>
-            <version>7.2.16-SNAPSHOT</version>
         </dependency>
     </dependencies>
 
@@ -81,41 +42,6 @@
                     <target>17</target>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.2.4</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <shadedArtifactAttached>true</shadedArtifactAttached>
-                            <shadedClassifierName>shaded</shadedClassifierName>
-                            <artifactSet>
-                                <includes>
-                                    <!-- Include your plugin's main JAR -->
-                                    <include>${project.groupId}:${project.artifactId}</include>
-                                    <include>javax.persistence:javax.persistence-api</include>
-                                    <include>com.zaxxer:HikariCP</include>
-                                </includes>
-                            </artifactSet>
-                            <filters>
-                                <filter>
-                                    <!-- Exclude META-INF/INDEX.LIST to prevent jar hell -->
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/INDEX.LIST</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
-
 </project>

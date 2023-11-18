@@ -1,24 +1,6 @@
-name: idletd
+name: damageindicator
 version: 1.1
-main: io.github.stealingdapenta.idletd.Idletd
+main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
-description: The best idle Minecraft Tower Defense game!
+description: The best Damage Indicator in the game!
 api-version: 1.20
-depend: [WorldGuard, FastAsyncWorldEdit]
-
-
-commands:
-  zombie:
-    description: Spawn a zombie.
-    usage: /<command>
-
-  tracker:
-    description: Give yourself the tracker item.
-    usage: /<command>
-
-  p:
-  plot:
-    description:
-    usage:
-        /plot
-        /plot new

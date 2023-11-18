@@ -1,6 +1,6 @@
-package io.github.stealingdapenta.idletd.listener;
+package io.github.stealingdapenta.damageindicator.listener;
 
-import io.github.stealingdapenta.idletd.Idletd;
+import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -15,7 +15,6 @@ import org.bukkit.util.Vector;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static net.royawesome.jlibnoise.MathHelper.round;
 
 public class DamageIndicatorListener implements Listener {
     private static final TextColor MAGIC = TextColor.color(95, 10, 95);
@@ -42,7 +41,9 @@ public class DamageIndicatorListener implements Listener {
     private ArmorStand createArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
         ArmorStand armorStand = initialLocation.getWorld().spawn(initialLocation, ArmorStand.class);
 
-        armorStand.customName(Component.text(round(damageDealt, 2), textColor));
+        double hit = Math.round(damageDealt * 100.0) / 100.0;
+
+        armorStand.customName(Component.text(hit, textColor));
         armorStand.setCustomNameVisible(true);
         armorStand.setVisible(false);
         armorStand.setCollidable(false);
@@ -82,7 +83,7 @@ public class DamageIndicatorListener implements Listener {
         final AtomicInteger steps = new AtomicInteger(30); // Number of animation steps
         int period = 0; // Delay between animation steps in server ticks (adjust as needed)
 
-        Bukkit.getScheduler().runTaskTimer(Idletd.getInstance(), task -> {
+        Bukkit.getScheduler().runTaskTimer(DamageIndicator.getInstance(), task -> {
             // Update ArmorStand position
             armorStand.teleport(armorStand.getLocation().add(velocity));
 
@@ -102,6 +103,5 @@ public class DamageIndicatorListener implements Listener {
         double height = 1;
         return targetLocation.add(0d, height, 0d);
     }
-
 }
 
