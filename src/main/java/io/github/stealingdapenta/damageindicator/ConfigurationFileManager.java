@@ -37,6 +37,7 @@ public class ConfigurationFileManager {
         String rgbString = plugin.getConfig().getString(key);
 
         if (rgbString != null) {
+            rgbString = rgbString.replace("(", "").replace(" ", "").replace(")", "").trim();
             String[] rgbValues = rgbString.split(",");
 
             if (rgbValues.length == 3) {
@@ -47,10 +48,10 @@ public class ConfigurationFileManager {
 
                     return TextColor.color(red, green, blue);
                 } catch (NumberFormatException e) {
-                    DamageIndicator.getInstance().getLogger().warning("Error parsing RGB values for key " + key);
+                    plugin.getLogger().warning("Error parsing RGB values for key " + key);
                 }
             } else {
-                DamageIndicator.getInstance().getLogger().warning("Invalid RGB format for key " + key);
+                plugin.getLogger().warning("Invalid RGB format for key " + key);
             }
         }
         return TextColor.color(255, 255, 255); // Default to white in case of error
