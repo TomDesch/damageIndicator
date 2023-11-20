@@ -1,20 +1,11 @@
 package io.github.stealingdapenta.damageindicator;
 
 import net.kyori.adventure.text.format.TextColor;
-import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.File;
-import java.io.IOException;
-
 public class ConfigurationFileManager {
-    private static final String CONFIG_FILE = "custom.yml";
     private static ConfigurationFileManager instance;
-    private FileConfiguration customConfig;
-    private File customConfigFile;
-
 
     private ConfigurationFileManager() {
     }
@@ -26,41 +17,24 @@ public class ConfigurationFileManager {
         return instance;
     }
 
-    public void loadConfig(JavaPlugin plugin) {
-        if (customConfig == null) {
-            customConfigFile = new File(plugin.getDataFolder(), CONFIG_FILE);
-            if (!customConfigFile.exists()) {
-                customConfigFile.getParentFile().mkdirs();
-                plugin.saveResource(CONFIG_FILE, false);
-            }
+    public void loadConfig() {
+        JavaPlugin plugin = DamageIndicator.getInstance();
 
-            customConfig = new YamlConfiguration();
-            try {
-                customConfig.load(customConfigFile);
+        plugin.saveDefaultConfig();
+        FileConfiguration configuration = plugin.getConfig();
 
-                //set default configurations
-                for (DefaultConfigValue defaultConfig : DefaultConfigValue.values()) {
-                    customConfig.addDefault(defaultConfig.name().toLowerCase(), defaultConfig.getDefaultValue());
-                }
-
-                customConfig.save(customConfigFile);
-
-            } catch (IOException | InvalidConfigurationException e) {
-                plugin.getLogger().severe("Error loading custom.yml: " + e.getMessage());
-            }
+        //set default configurations
+        for (DefaultConfigValue defaultConfig : DefaultConfigValue.values()) {
+            configuration.addDefault(defaultConfig.name().toLowerCase(), defaultConfig.getDefaultValue());
         }
-    }
 
-    public FileConfiguration getCustomConfig() {
-        return customConfig;
-    }
-
-    public File getCustomConfigFile() {
-        return customConfigFile;
+        configuration.options().copyDefaults(true);
+        plugin.saveConfig();
     }
 
     public TextColor getTextColor(String key) {
-        String rgbString = customConfig.getString(key);
+        JavaPlugin plugin = DamageIndicator.getInstance();
+        String rgbString = plugin.getConfig().getString(key);
 
         if (rgbString != null) {
             String[] rgbValues = rgbString.split(",");
