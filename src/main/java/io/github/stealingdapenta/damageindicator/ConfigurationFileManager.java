@@ -43,6 +43,8 @@ public class ConfigurationFileManager {
                     customConfig.addDefault(defaultConfig.name().toLowerCase(), defaultConfig.getDefaultValue());
                 }
 
+                customConfig.save(customConfigFile);
+
             } catch (IOException | InvalidConfigurationException e) {
                 plugin.getLogger().severe("Error loading custom.yml: " + e.getMessage());
             }
