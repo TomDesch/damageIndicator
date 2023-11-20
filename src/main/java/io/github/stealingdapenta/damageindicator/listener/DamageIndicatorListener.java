@@ -1,5 +1,6 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
@@ -21,13 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class DamageIndicatorListener implements Listener {
-    private static final TextColor MAGIC = TextColor.color(95, 10, 95);
-    private static final TextColor MELEE = TextColor.color(100, 100, 100);
-    private static final TextColor POISON = TextColor.color(0, 100, 20);
-    private static final TextColor FIRE = TextColor.color(200, 90, 25);
-    private static final TextColor RANGED = TextColor.color(130, 70, 0);
-    private static final TextColor OTHER = TextColor.color(130, 130, 30);
-    private static final String CUSTOM_NSK_TAG = "Why-are-we-here";
+    private static final String CUSTOM_NSK_TAG = "customnsktag";
 
     /**
      * In case any armor stands get 'stuck'
@@ -39,8 +34,8 @@ public class DamageIndicatorListener implements Listener {
     @EventHandler
     public void removeStuckArmorStands(ChunkLoadEvent event) {
         for (Entity possibleArmorStand : event.getChunk().getEntities()) {
-            Boolean justToSuffer = possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN);
-            if (Objects.nonNull(justToSuffer) && justToSuffer) {
+            Boolean customNSKValue = possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN);
+            if (Objects.nonNull(customNSKValue) && customNSKValue) {
                 possibleArmorStand.remove();
             }
         }
@@ -82,13 +77,15 @@ public class DamageIndicatorListener implements Listener {
     }
 
     private TextColor calculateColor(EntityDamageEvent.DamageCause cause) {
+        ConfigurationFileManager configManager = ConfigurationFileManager.getInstance();
+
         return switch (cause) {
-            case MAGIC -> MAGIC;
-            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> MELEE;
-            case POISON -> POISON;
-            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> FIRE;
-            case PROJECTILE -> RANGED;
-            default -> OTHER;
+            case MAGIC -> configManager.getTextColor("magic");
+            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> configManager.getTextColor("melee");
+            case POISON -> configManager.getTextColor("poison");
+            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> configManager.getTextColor("fire");
+            case PROJECTILE -> configManager.getTextColor("ranged");
+            default -> configManager.getTextColor("other");
         };
     }
 

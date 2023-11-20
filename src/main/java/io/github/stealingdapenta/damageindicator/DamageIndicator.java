@@ -19,16 +19,18 @@ public class DamageIndicator extends JavaPlugin {
     public void onEnable() {
         instance = this;
 
+        ConfigurationFileManager.getInstance().loadConfig(instance);
+
         Bukkit.getPluginManager().registerEvents(damageIndicatorListener, getInstance());
 
-        this.pluginEnabledLog();
+        pluginEnabledLog();
     }
 
 
     @Override
     public void onDisable() {
         instance = null;
-        this.pluginDisabledLog();
+        pluginDisabledLog();
     }
 
     private void pluginEnabledLog() {
