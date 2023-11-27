@@ -4,6 +4,8 @@ import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Objects;
+
 public class ConfigurationFileManager {
     private static ConfigurationFileManager instance;
 
@@ -38,7 +40,18 @@ public class ConfigurationFileManager {
 
     public int getValue(String key) {
         JavaPlugin plugin = DamageIndicator.getInstance();
-        return plugin.getConfig().getInt(key);
+        String valueAsString = plugin.getConfig().getString(key);
+        int result;
+        if (Objects.isNull(valueAsString)) {
+            valueAsString = "0";
+        }
+        try {
+            result = Integer.parseInt(valueAsString);
+        } catch (NumberFormatException numberFormatException) {
+            DamageIndicator.getInstance().getLogger().warning("Error parsing the value in the config file for " + key);
+            result = 0;
+        }
+        return result;
     }
 
     public TextColor getTextColor(DefaultConfigValue key) {

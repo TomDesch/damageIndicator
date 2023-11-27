@@ -12,7 +12,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -23,19 +23,19 @@ public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
     private static final String SPACE = " ";
     private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
-    private final ConfigurationFileManager cfm;
+    private final ConfigurationFileManager configurationFileManager;
 
-    public HealthBarListener(ConfigurationFileManager cfm) {
-        this.cfm = cfm;
+    public HealthBarListener() {
+        configurationFileManager = ConfigurationFileManager.getInstance();
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
         double percentAlive = currentHealth / maxHealth;
-        int aliveBarLength = Math.max(0, (int) (percentAlive * 16)); // 0 <= x <= 16
-        int deadBarLength = Math.max(0, 10 - aliveBarLength); // 0 <= x <= 10
+        int aliveBarLength = Math.max(0, (int) (percentAlive * 16));
+        int deadBarLength = Math.max(0, 16 - aliveBarLength);
 
-        TextComponent aliveComponent = getBoldAndStrikeThroughSpaceLine(aliveBarLength, cfm.getTextColor(DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR));
-        TextComponent deadComponent = getBoldAndStrikeThroughSpaceLine(deadBarLength, cfm.getTextColor(DefaultConfigValue.HEALTH_BAR_DEAD_COLOR));
+        TextComponent aliveComponent = getBoldAndStrikeThroughSpaceLine(aliveBarLength, configurationFileManager.getTextColor(DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR));
+        TextComponent deadComponent = getBoldAndStrikeThroughSpaceLine(deadBarLength, configurationFileManager.getTextColor(DefaultConfigValue.HEALTH_BAR_DEAD_COLOR));
 
         return aliveComponent.append(deadComponent);
     }
@@ -45,18 +45,20 @@ public class HealthBarListener implements Listener {
     }
 
     @EventHandler
-    public void displayHealthBar(EntityDamageByEntityEvent event) {
+    public void displayHealthBar(EntityDamageEvent event) {
         Entity damagedEntity = event.getEntity();
-
         if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) return;
 
-        BukkitTask existingHealthBar = entitiesWithActiveHealthBars.getOrDefault(livingDamagedEntity, null);
+        BukkitTask existingHealthBar = entitiesWithActiveHealthBars.get(livingDamagedEntity);
         if (Objects.nonNull(existingHealthBar)) {
             existingHealthBar.cancel();
+            livingDamagedEntity.setCustomNameVisible(false);
         }
 
+        int displayDuration = configurationFileManager.getValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
+
         BukkitTask displayBarTask = new BukkitRunnable() {
-            private int ticksLeft = cfm.getValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION) * TICKS_PER_SECOND;
+            private int ticksLeft = TICKS_PER_SECOND * Math.max(1, Math.min(displayDuration, 10));
 
             @Override
             public void run() {
