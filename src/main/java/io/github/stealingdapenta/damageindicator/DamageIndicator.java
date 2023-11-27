@@ -1,6 +1,7 @@
 package io.github.stealingdapenta.damageindicator;
 
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
+import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -10,6 +11,7 @@ public class DamageIndicator extends JavaPlugin {
 
     // Listeners
     private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();
+    private final HealthBarListener healthBarListener = new HealthBarListener();
 
     public static DamageIndicator getInstance() {
         return instance;
@@ -22,6 +24,7 @@ public class DamageIndicator extends JavaPlugin {
         ConfigurationFileManager.getInstance().loadConfig();
 
         Bukkit.getPluginManager().registerEvents(damageIndicatorListener, getInstance());
+        Bukkit.getPluginManager().registerEvents(healthBarListener, getInstance());
 
         pluginEnabledLog();
     }
