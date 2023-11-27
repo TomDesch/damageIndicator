@@ -32,6 +32,19 @@ public class ConfigurationFileManager {
         plugin.saveConfig();
     }
 
+    public int getValue(DefaultConfigValue key) {
+        return getValue(key.name().toLowerCase());
+    }
+
+    public int getValue(String key) {
+        JavaPlugin plugin = DamageIndicator.getInstance();
+        return plugin.getConfig().getInt(key);
+    }
+
+    public TextColor getTextColor(DefaultConfigValue key) {
+        return getTextColor(key.name().toLowerCase());
+    }
+
     public TextColor getTextColor(String key) {
         JavaPlugin plugin = DamageIndicator.getInstance();
         String rgbString = plugin.getConfig().getString(key);

@@ -1,6 +1,8 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
@@ -19,17 +21,21 @@ import java.util.Objects;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
-    private static final int DURATION_IN_SECONDS = 5;
     private static final String SPACE = " ";
     private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
+    private final ConfigurationFileManager cfm;
+
+    public HealthBarListener(ConfigurationFileManager cfm) {
+        this.cfm = cfm;
+    }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
         double percentAlive = currentHealth / maxHealth;
         int aliveBarLength = Math.max(0, (int) (percentAlive * 16)); // 0 <= x <= 16
         int deadBarLength = Math.max(0, 10 - aliveBarLength); // 0 <= x <= 10
 
-        TextComponent aliveComponent = getBoldAndStrikeThroughSpaceLine(aliveBarLength, TextColor.color(0, 255, 0));
-        TextComponent deadComponent = getBoldAndStrikeThroughSpaceLine(deadBarLength, TextColor.color(100, 100, 100));
+        TextComponent aliveComponent = getBoldAndStrikeThroughSpaceLine(aliveBarLength, cfm.getTextColor(DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR));
+        TextComponent deadComponent = getBoldAndStrikeThroughSpaceLine(deadBarLength, cfm.getTextColor(DefaultConfigValue.HEALTH_BAR_DEAD_COLOR));
 
         return aliveComponent.append(deadComponent);
     }
@@ -50,7 +56,7 @@ public class HealthBarListener implements Listener {
         }
 
         BukkitTask displayBarTask = new BukkitRunnable() {
-            private int ticksLeft = DURATION_IN_SECONDS * TICKS_PER_SECOND;
+            private int ticksLeft = cfm.getValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION) * TICKS_PER_SECOND;
 
             @Override
             public void run() {

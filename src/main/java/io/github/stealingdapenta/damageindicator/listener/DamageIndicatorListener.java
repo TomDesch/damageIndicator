@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -80,12 +81,12 @@ public class DamageIndicatorListener implements Listener {
         ConfigurationFileManager configManager = ConfigurationFileManager.getInstance();
 
         return switch (cause) {
-            case MAGIC -> configManager.getTextColor("magic");
-            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> configManager.getTextColor("melee");
-            case POISON -> configManager.getTextColor("poison");
-            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> configManager.getTextColor("fire");
-            case PROJECTILE -> configManager.getTextColor("ranged");
-            default -> configManager.getTextColor("other");
+            case MAGIC -> configManager.getTextColor(DefaultConfigValue.MAGIC);
+            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> configManager.getTextColor(DefaultConfigValue.MELEE);
+            case POISON -> configManager.getTextColor(DefaultConfigValue.POISON);
+            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> configManager.getTextColor(DefaultConfigValue.FIRE);
+            case PROJECTILE -> configManager.getTextColor(DefaultConfigValue.RANGED);
+            default -> configManager.getTextColor(DefaultConfigValue.OTHER);
         };
     }
 
