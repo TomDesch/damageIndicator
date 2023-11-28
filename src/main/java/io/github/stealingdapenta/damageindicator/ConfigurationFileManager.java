@@ -34,6 +34,23 @@ public class ConfigurationFileManager {
         plugin.saveConfig();
     }
 
+    public boolean getBooleanValue(DefaultConfigValue key) {
+        return getBooleanValue(key.name().toLowerCase());
+    }
+
+    public boolean getBooleanValue(String key) {
+        JavaPlugin plugin = DamageIndicator.getInstance();
+        String valueAsString = plugin.getConfig().getString(key);
+        boolean result;
+        try {
+            result = Boolean.parseBoolean(valueAsString);
+        } catch (NumberFormatException | NullPointerException e) {
+            DamageIndicator.getInstance().getLogger().warning("Error parsing the value in the config file for " + key);
+            result = false;
+        }
+        return result;
+    }
+
     public int getValue(DefaultConfigValue key) {
         return getValue(key.name().toLowerCase());
     }
