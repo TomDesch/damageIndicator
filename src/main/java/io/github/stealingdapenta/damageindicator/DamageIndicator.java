@@ -23,8 +23,8 @@ public class DamageIndicator extends JavaPlugin {
 
         ConfigurationFileManager.getInstance().loadConfig();
 
-        Bukkit.getPluginManager().registerEvents(damageIndicatorListener, getInstance());
-        Bukkit.getPluginManager().registerEvents(healthBarListener, getInstance());
+        enableDamageIndicator();
+        enableHealthBar();
 
         pluginEnabledLog();
     }
@@ -36,8 +36,26 @@ public class DamageIndicator extends JavaPlugin {
         pluginDisabledLog();
     }
 
+    private void enableDamageIndicator() {
+        if (ConfigurationFileManager.getInstance().getBooleanValue(DefaultConfigValue.ENABLE_DAMAGE_INDICATOR)) {
+            Bukkit.getPluginManager().registerEvents(damageIndicatorListener, getInstance());
+            getLogger().info("Damage indicator feature enabled. To disable, modify the config.yml.");
+        } else {
+            getLogger().info("Damage indicator feature not enabled. To enable, modify the config.yml.");
+        }
+    }
+
+    private void enableHealthBar() {
+        if (ConfigurationFileManager.getInstance().getBooleanValue(DefaultConfigValue.ENABLE_HEALTH_BAR)) {
+            Bukkit.getPluginManager().registerEvents(healthBarListener, getInstance());
+            getLogger().info("Health bar feature enabled. To disable, modify the config.yml.");
+        } else {
+            getLogger().info("Health bar feature not enabled. To enable, modify the config.yml.");
+        }
+    }
+
     private void pluginEnabledLog() {
-        getLogger().info("Damage indicator enabled.");
+        getLogger().info("Damage indicator plugin enabled.");
     }
 
     private void pluginDisabledLog() {
