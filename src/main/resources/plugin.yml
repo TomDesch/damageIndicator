@@ -1,5 +1,5 @@
 name: damageindicator
-version: 1.1.5
+version: 1.1.6
 main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
 description: The best Damage Indicator in the game!
