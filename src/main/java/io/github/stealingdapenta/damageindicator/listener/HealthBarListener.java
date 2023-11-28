@@ -8,7 +8,6 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.attribute.Attribute;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -21,8 +20,11 @@ import java.util.Objects;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
+    private static final int MIN_SECONDS = 1;
+    private static final int MAX_SECONDS = 10;
     private static final String SPACE = " ";
     private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
+    private final HashMap<LivingEntity, Component> originalEntityNames = new HashMap<>();
     private final ConfigurationFileManager configurationFileManager;
 
     public HealthBarListener() {
@@ -46,39 +48,52 @@ public class HealthBarListener implements Listener {
 
     @EventHandler
     public void displayHealthBar(EntityDamageEvent event) {
-        Entity damagedEntity = event.getEntity();
-        if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) return;
+        if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
 
-        BukkitTask existingHealthBar = entitiesWithActiveHealthBars.get(livingDamagedEntity);
-        if (Objects.nonNull(existingHealthBar)) {
-            existingHealthBar.cancel();
-            livingDamagedEntity.setCustomNameVisible(false);
+        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
+        if (Objects.nonNull(existingHealthBarTask)) {
+            cancelTask(existingHealthBarTask, livingEntity);
+            resetEntityName(livingEntity);
         }
 
+        BukkitTask displayBarTask = getDisplayBarTask(livingEntity, getTicksDuration());
+        entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
+        Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
+        originalEntityNames.put(livingEntity, originalName);
+
+        displayHealthBar(livingEntity);
+    }
+
+    private void cancelTask(BukkitTask taskToCancel, LivingEntity entityToRename) {
+        taskToCancel.cancel();
+        entitiesWithActiveHealthBars.remove(entityToRename);
+    }
+
+    private void resetEntityName(LivingEntity entity) {
+        entity.customName(originalEntityNames.get(entity));
+        originalEntityNames.remove(entity);
+    }
+
+    private int getTicksDuration() {
         int displayDuration = configurationFileManager.getValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
+        return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
+    }
 
-        BukkitTask displayBarTask = new BukkitRunnable() {
-            private int ticksLeft = TICKS_PER_SECOND * Math.max(1, Math.min(displayDuration, 10));
+    private void displayHealthBar(LivingEntity livingEntity) {
+        double health = livingEntity.getHealth();
+        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
 
+        livingEntity.customName(createHealthBar(health, maxHealth));
+        livingEntity.setCustomNameVisible(true);
+    }
+
+    private BukkitTask getDisplayBarTask(LivingEntity entity, int displayDuration) {
+        return new BukkitRunnable() {
             @Override
             public void run() {
-                if (ticksLeft <= 0) {
-                    this.cancel();
-                    livingDamagedEntity.setCustomNameVisible(false);
-                    return;
-                }
-
-                double health = livingDamagedEntity.getHealth();
-                double maxHealth = Objects.requireNonNull(livingDamagedEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
-
-                livingDamagedEntity.customName(createHealthBar(health, maxHealth));
-                livingDamagedEntity.setCustomNameVisible(true);
-
-                ticksLeft--;
+                entitiesWithActiveHealthBars.remove(entity);
+                resetEntityName(entity);
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0L, 1L); // Run every tick (1L)
-
-        entitiesWithActiveHealthBars.put(livingDamagedEntity, displayBarTask);
+        }.runTaskLater(DamageIndicator.getInstance(), displayDuration);
     }
 }
-
