@@ -47,12 +47,10 @@ public class DamageIndicatorListener implements Listener {
     public void displayDamageIndicator(EntityDamageEvent event) {
         Entity damagedEntity = event.getEntity();
 
-        if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) {
-            return;
-        }
+        if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) return;
 
         Location initialLocation = this.getHitLocation(livingDamagedEntity);
-        double damageDealt = event.getDamage();
+        double damageDealt = event.getFinalDamage();
         TextColor textColor = this.calculateColor(event.getCause());
         this.animateArmorStand(initialLocation, damageDealt, textColor);
     }
@@ -89,7 +87,6 @@ public class DamageIndicatorListener implements Listener {
             default -> configManager.getTextColor(DefaultConfigValue.OTHER);
         };
     }
-
 
     public void animateArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
         ArmorStand armorStand = this.createArmorStand(initialLocation, damageDealt, textColor);
