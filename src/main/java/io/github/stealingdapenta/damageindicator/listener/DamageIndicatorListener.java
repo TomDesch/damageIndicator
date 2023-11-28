@@ -18,7 +18,6 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -35,12 +34,10 @@ public class DamageIndicatorListener implements Listener {
     @EventHandler
     public void removeStuckArmorStands(ChunkLoadEvent event) {
         for (Entity possibleArmorStand : event.getChunk().getEntities()) {
-            Boolean customNSKValue = possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN);
-            if (Objects.nonNull(customNSKValue) && customNSKValue) {
+            if (Boolean.TRUE.equals(possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN))) {
                 possibleArmorStand.remove();
             }
         }
-
     }
 
     @EventHandler
