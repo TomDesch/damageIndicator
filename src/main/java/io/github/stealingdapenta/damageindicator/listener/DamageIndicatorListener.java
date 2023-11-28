@@ -18,7 +18,6 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -35,24 +34,20 @@ public class DamageIndicatorListener implements Listener {
     @EventHandler
     public void removeStuckArmorStands(ChunkLoadEvent event) {
         for (Entity possibleArmorStand : event.getChunk().getEntities()) {
-            Boolean customNSKValue = possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN);
-            if (Objects.nonNull(customNSKValue) && customNSKValue) {
+            if (Boolean.TRUE.equals(possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN))) {
                 possibleArmorStand.remove();
             }
         }
-
     }
 
     @EventHandler
     public void displayDamageIndicator(EntityDamageEvent event) {
         Entity damagedEntity = event.getEntity();
 
-        if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) {
-            return;
-        }
+        if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) return;
 
         Location initialLocation = this.getHitLocation(livingDamagedEntity);
-        double damageDealt = event.getDamage();
+        double damageDealt = event.getFinalDamage();
         TextColor textColor = this.calculateColor(event.getCause());
         this.animateArmorStand(initialLocation, damageDealt, textColor);
     }
@@ -89,7 +84,6 @@ public class DamageIndicatorListener implements Listener {
             default -> configManager.getTextColor(DefaultConfigValue.OTHER);
         };
     }
-
 
     public void animateArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
         ArmorStand armorStand = this.createArmorStand(initialLocation, damageDealt, textColor);
