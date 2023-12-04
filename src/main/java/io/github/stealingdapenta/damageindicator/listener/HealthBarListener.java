@@ -88,7 +88,9 @@ public class HealthBarListener implements Listener {
         Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
         originalEntityNames.put(livingEntity, originalName);
 
-        displayHealthBar(livingEntity, event.getFinalDamage());
+        double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
+
+        displayBar(livingEntity, currentHealth);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -116,11 +118,10 @@ public class HealthBarListener implements Listener {
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 
-    private void displayHealthBar(LivingEntity livingEntity, double damageDone) {
-        double health = livingEntity.getHealth() - damageDone;
+    private void displayBar(LivingEntity livingEntity, double currentHealth) {
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
 
-        livingEntity.customName(createHealthBar(health, maxHealth));
+        livingEntity.customName(createHealthBar(currentHealth, maxHealth));
         livingEntity.setCustomNameVisible(true);
     }
 
