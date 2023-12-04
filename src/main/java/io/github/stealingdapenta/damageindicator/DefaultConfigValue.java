@@ -11,7 +11,12 @@ public enum DefaultConfigValue {
     ENABLE_HEALTH_BAR("true"),
     HEALTH_BAR_DISPLAY_DURATION("5"),
     HEALTH_BAR_ALIVE_COLOR("(0, 255, 0)"),
-    HEALTH_BAR_DEAD_COLOR("(100, 100, 100)");
+    HEALTH_BAR_ALIVE_SYMBOL("♥"),
+    HEALTH_BAR_DEAD_COLOR("(100, 100, 100)"),
+    HEALTH_BAR_DEAD_SYMBOL("♡"),
+    HEALTH_BAR_STRIKETHROUGH("true"),
+    HEALTH_BAR_BOLD("true"),
+    HEALTH_BAR_UNDERLINED("false");
 
     private final String defaultValue;
 

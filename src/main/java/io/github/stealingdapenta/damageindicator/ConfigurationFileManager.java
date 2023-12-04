@@ -51,6 +51,10 @@ public class ConfigurationFileManager {
         return result;
     }
 
+    public String getStringValue(DefaultConfigValue key) {
+        return DamageIndicator.getInstance().getConfig().getString(key.name().toLowerCase());
+    }
+
     public int getValue(DefaultConfigValue key) {
         return getValue(key.name().toLowerCase());
     }
