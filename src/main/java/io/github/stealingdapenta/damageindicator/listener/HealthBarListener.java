@@ -12,6 +12,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -87,7 +88,17 @@ public class HealthBarListener implements Listener {
         Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
         originalEntityNames.put(livingEntity, originalName);
 
-        displayHealthBar(livingEntity);
+        displayHealthBar(livingEntity, event.getFinalDamage());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void restoreNameUponDeath(EntityDeathEvent event) {
+        LivingEntity livingEntity = event.getEntity();
+        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
+        if (Objects.nonNull(existingHealthBarTask)) {
+            cancelTask(existingHealthBarTask, livingEntity);
+            resetEntityName(livingEntity);
+        }
     }
 
     private void cancelTask(BukkitTask taskToCancel, LivingEntity entityToRename) {
@@ -105,8 +116,8 @@ public class HealthBarListener implements Listener {
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 
-    private void displayHealthBar(LivingEntity livingEntity) {
-        double health = livingEntity.getHealth();
+    private void displayHealthBar(LivingEntity livingEntity, double damageDone) {
+        double health = livingEntity.getHealth() - damageDone;
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
 
         livingEntity.customName(createHealthBar(health, maxHealth));
