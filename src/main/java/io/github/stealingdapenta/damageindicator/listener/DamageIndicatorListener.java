@@ -35,7 +35,7 @@ public class DamageIndicatorListener implements Listener {
     @EventHandler
     public void removeStuckArmorStands(ChunkLoadEvent event) {
         for (Entity possibleArmorStand : event.getChunk().getEntities()) {
-            if (Boolean.TRUE.equals(possibleArmorStand.getPersistentDataContainer().get(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN))) {
+            if (Boolean.TRUE.equals(possibleArmorStand.getPersistentDataContainer().get(getCustomNamespacedKey(), PersistentDataType.BOOLEAN))) {
                 possibleArmorStand.remove();
             }
         }
@@ -53,7 +53,7 @@ public class DamageIndicatorListener implements Listener {
         this.animateArmorStand(initialLocation, damageDealt, textColor);
     }
 
-    private NamespacedKey getCustomNamespacedKey() {
+    public static NamespacedKey getCustomNamespacedKey() {
         return new NamespacedKey(DamageIndicator.getInstance(), CUSTOM_NSK_TAG);
     }
 
@@ -69,7 +69,7 @@ public class DamageIndicatorListener implements Listener {
             armorStand.setMarker(true);
             armorStand.setGravity(true);
             armorStand.setSmall(true);
-            armorStand.getPersistentDataContainer().set(this.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
+            armorStand.getPersistentDataContainer().set(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
         });
     }
 

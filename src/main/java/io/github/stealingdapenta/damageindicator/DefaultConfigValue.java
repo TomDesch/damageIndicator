@@ -9,6 +9,7 @@ public enum DefaultConfigValue {
     RANGED("(130, 70, 0)"),
     OTHER("(130, 130, 30)"),
     ENABLE_HEALTH_BAR("true"),
+    ENABLE_HOLOGRAM_HEALTH_BAR("true"),
     HEALTH_BAR_DISPLAY_DURATION("5"),
     HEALTH_BAR_ALIVE_COLOR("(0, 255, 0)"),
     HEALTH_BAR_ALIVE_SYMBOL("♥"),

@@ -6,19 +6,23 @@ import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
 import java.util.Objects;
 
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_COLOR;
@@ -79,18 +83,68 @@ public class HealthBarListener implements Listener {
 
         BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
         if (Objects.nonNull(existingHealthBarTask)) {
-            cancelTask(existingHealthBarTask, livingEntity);
-            resetEntityName(livingEntity);
+            existingHealthBarTask.cancel();
         }
 
-        BukkitTask displayBarTask = getDisplayBarTask(livingEntity, getTicksDuration());
-        entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
-        Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
-        originalEntityNames.put(livingEntity, originalName);
-
         double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
+        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
+        Component name = createHealthBar(currentHealth, maxHealth);
 
-        displayBar(livingEntity, currentHealth);
+        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
+            displayHologramBar(livingEntity, name);
+        } else {
+            BukkitTask displayBarTask = getDisplayBarTask(livingEntity, getTicksDuration());
+            entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
+
+            Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
+            originalEntityNames.put(livingEntity, originalName);
+
+            displayBar(livingEntity, name);
+        }
+    }
+
+    private void displayHologramBar(LivingEntity livingEntity, Component name) {
+        BukkitTask followTask = new BukkitRunnable() {
+            int ticks = 0;
+            final ArmorStand armorStand = createArmorStandHologram(locationAboveEntity(livingEntity), name);
+
+            @Override
+            public synchronized void cancel() throws IllegalStateException {
+                armorStand.remove();
+                super.cancel();
+            }
+
+            @Override
+            public void run() {
+                if (ticks >= getTicksDuration()) {
+                    this.cancel();
+                    return;
+                }
+
+                armorStand.teleport(locationAboveEntity(livingEntity));
+                ticks++;
+            }
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, 1);
+
+        entitiesWithActiveHealthBars.put(livingEntity, followTask);
+    }
+
+    private Location locationAboveEntity(LivingEntity livingEntity) {
+        return livingEntity.getLocation().add(0, livingEntity.getHeight(), 0);
+    }
+
+    private ArmorStand createArmorStandHologram(Location initialLocation, Component name) {
+        return initialLocation.getWorld().spawn(initialLocation, ArmorStand.class, armorStand -> {
+            armorStand.customName(name);
+            armorStand.setMarker(true);
+            armorStand.setCustomNameVisible(true);
+            armorStand.setVisible(false);
+            armorStand.setCollidable(false);
+            armorStand.setInvulnerable(true);
+            armorStand.setGravity(false);
+            armorStand.setSmall(true);
+            armorStand.getPersistentDataContainer().set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -98,14 +152,8 @@ public class HealthBarListener implements Listener {
         LivingEntity livingEntity = event.getEntity();
         BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
         if (Objects.nonNull(existingHealthBarTask)) {
-            cancelTask(existingHealthBarTask, livingEntity);
-            resetEntityName(livingEntity);
+            existingHealthBarTask.cancel();
         }
-    }
-
-    private void cancelTask(BukkitTask taskToCancel, LivingEntity entityToRename) {
-        taskToCancel.cancel();
-        entitiesWithActiveHealthBars.remove(entityToRename);
     }
 
     private void resetEntityName(LivingEntity entity) {
@@ -118,15 +166,20 @@ public class HealthBarListener implements Listener {
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 
-    private void displayBar(LivingEntity livingEntity, double currentHealth) {
-        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
-
-        livingEntity.customName(createHealthBar(currentHealth, maxHealth));
+    private void displayBar(LivingEntity livingEntity, Component name) {
+        livingEntity.customName(name);
         livingEntity.setCustomNameVisible(true);
     }
 
     private BukkitTask getDisplayBarTask(LivingEntity entity, int displayDuration) {
         return new BukkitRunnable() {
+            @Override
+            public synchronized void cancel() throws IllegalStateException {
+                entitiesWithActiveHealthBars.remove(entity);
+                resetEntityName(entity);
+                super.cancel();
+            }
+
             @Override
             public void run() {
                 entitiesWithActiveHealthBars.remove(entity);
