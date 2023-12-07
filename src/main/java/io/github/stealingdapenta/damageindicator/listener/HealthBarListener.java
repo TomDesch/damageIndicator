@@ -29,6 +29,7 @@ import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALT
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
@@ -77,7 +78,7 @@ public class HealthBarListener implements Listener {
         return healthBar;
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
 
@@ -85,6 +86,7 @@ public class HealthBarListener implements Listener {
         if (Objects.nonNull(existingHealthBarTask)) {
             existingHealthBarTask.cancel();
         }
+         //todo fix hp bars not deleting upon death
 
         double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
@@ -105,18 +107,19 @@ public class HealthBarListener implements Listener {
 
     private void displayHologramBar(LivingEntity livingEntity, Component name) {
         BukkitTask followTask = new BukkitRunnable() {
-            int ticks = 0;
             final ArmorStand armorStand = createArmorStandHologram(locationAboveEntity(livingEntity), name);
+            int ticks = 0;
 
             @Override
             public synchronized void cancel() throws IllegalStateException {
                 armorStand.remove();
+                DamageIndicator.getInstance().getLogger().info("Cancelling task, and removing armorstand"); // not sure if this is functional
                 super.cancel();
             }
 
             @Override
             public void run() {
-                if (ticks >= getTicksDuration()) {
+                if (ticks >= getTicksDuration() || !livingEntity.isValid()) {
                     this.cancel();
                     return;
                 }
@@ -130,7 +133,7 @@ public class HealthBarListener implements Listener {
     }
 
     private Location locationAboveEntity(LivingEntity livingEntity) {
-        return livingEntity.getLocation().add(0, livingEntity.getHeight(), 0);
+        return livingEntity.getLocation().add(0, livingEntity.getHeight() + cfm.getDouble(HOLOGRAM_POSITION), 0);
     }
 
     private ArmorStand createArmorStandHologram(Location initialLocation, Component name) {
@@ -162,7 +165,7 @@ public class HealthBarListener implements Listener {
     }
 
     private int getTicksDuration() {
-        int displayDuration = cfm.getValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
+        int displayDuration = cfm.getInt(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 

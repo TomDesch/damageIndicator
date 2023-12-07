@@ -8,6 +8,7 @@ import java.util.Objects;
 
 public class ConfigurationFileManager {
     private static ConfigurationFileManager instance;
+    private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
 
     private ConfigurationFileManager() {
     }
@@ -45,7 +46,7 @@ public class ConfigurationFileManager {
         try {
             result = Boolean.parseBoolean(valueAsString);
         } catch (NumberFormatException | NullPointerException e) {
-            DamageIndicator.getInstance().getLogger().warning("Error parsing the value in the config file for " + key);
+            DamageIndicator.getInstance().getLogger().warning(PARSING_ERROR.formatted(key));
             result = false;
         }
         return result;
@@ -55,11 +56,31 @@ public class ConfigurationFileManager {
         return DamageIndicator.getInstance().getConfig().getString(key.name().toLowerCase());
     }
 
-    public int getValue(DefaultConfigValue key) {
-        return getValue(key.name().toLowerCase());
+    public double getDouble(DefaultConfigValue key) {
+        return getDouble(key.name().toLowerCase());
     }
 
-    public int getValue(String key) {
+    private double getDouble(String key) {
+        JavaPlugin plugin = DamageIndicator.getInstance();
+        String valueAsString = plugin.getConfig().getString(key);
+        double result;
+        if (Objects.isNull(valueAsString)) {
+            valueAsString = "0";
+        }
+        try {
+            result = Double.parseDouble(valueAsString);
+        } catch (NumberFormatException numberFormatException) {
+            DamageIndicator.getInstance().getLogger().warning(PARSING_ERROR.formatted(key));
+            result = 0;
+        }
+        return result;
+    }
+
+    public int getInt(DefaultConfigValue key) {
+        return getInt(key.name().toLowerCase());
+    }
+
+    private int getInt(String key) {
         JavaPlugin plugin = DamageIndicator.getInstance();
         String valueAsString = plugin.getConfig().getString(key);
         int result;
@@ -69,7 +90,7 @@ public class ConfigurationFileManager {
         try {
             result = Integer.parseInt(valueAsString);
         } catch (NumberFormatException numberFormatException) {
-            DamageIndicator.getInstance().getLogger().warning("Error parsing the value in the config file for " + key);
+            DamageIndicator.getInstance().getLogger().warning(PARSING_ERROR.formatted(key));
             result = 0;
         }
         return result;
@@ -79,7 +100,7 @@ public class ConfigurationFileManager {
         return getTextColor(key.name().toLowerCase());
     }
 
-    public TextColor getTextColor(String key) {
+    private TextColor getTextColor(String key) {
         JavaPlugin plugin = DamageIndicator.getInstance();
         String rgbString = plugin.getConfig().getString(key);
 
