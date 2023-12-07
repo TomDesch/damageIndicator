@@ -18,7 +18,7 @@ public enum DefaultConfigValue {
     HEALTH_BAR_STRIKETHROUGH("true"),
     HEALTH_BAR_BOLD("true"),
     HEALTH_BAR_UNDERLINED("false"),
-    HOLOGRAM_POSITION("-0.2");
+    HOLOGRAM_POSITION("-0.3");
 
     private final String defaultValue;
 

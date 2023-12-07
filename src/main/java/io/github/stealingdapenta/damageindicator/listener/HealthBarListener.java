@@ -86,7 +86,6 @@ public class HealthBarListener implements Listener {
         if (Objects.nonNull(existingHealthBarTask)) {
             existingHealthBarTask.cancel();
         }
-         //todo fix hp bars not deleting upon death
 
         double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
@@ -112,8 +111,12 @@ public class HealthBarListener implements Listener {
 
             @Override
             public synchronized void cancel() throws IllegalStateException {
-                armorStand.remove();
-                DamageIndicator.getInstance().getLogger().info("Cancelling task, and removing armorstand"); // not sure if this is functional
+                if (armorStand.isValid()) {
+                    DamageIndicator.getInstance().getLogger().info("Cancelling task, and removing valid armor stand");
+                    armorStand.remove();
+                } else {
+                    DamageIndicator.getInstance().getLogger().info("Cancelling task, but invalid armor stand");
+                }
                 super.cancel();
             }
 
@@ -124,7 +127,10 @@ public class HealthBarListener implements Listener {
                     return;
                 }
 
-                armorStand.teleport(locationAboveEntity(livingEntity));
+                if (armorStand.isValid()) {
+                    armorStand.teleport(locationAboveEntity(livingEntity));
+                }
+
                 ticks++;
             }
         }.runTaskTimer(DamageIndicator.getInstance(), 0, 1);
@@ -178,8 +184,7 @@ public class HealthBarListener implements Listener {
         return new BukkitRunnable() {
             @Override
             public synchronized void cancel() throws IllegalStateException {
-                entitiesWithActiveHealthBars.remove(entity);
-                resetEntityName(entity);
+                this.run();
                 super.cancel();
             }
 
