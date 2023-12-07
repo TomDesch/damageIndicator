@@ -12,6 +12,7 @@ import java.util.Objects;
 public class ReloadConfigCommand implements CommandExecutor {
 
     private static final String NO_PERMISSION = "You don't have the required %s to execute this command.";
+    private static final String RELOADED = "Successfully reloaded the DamageIndicator configuration file.";
     private final ConfigurationFileManager cfm = ConfigurationFileManager.getInstance();
 
     @Override
@@ -27,7 +28,8 @@ public class ReloadConfigCommand implements CommandExecutor {
             return true;
         }
 
-        ConfigurationFileManager.getInstance().loadConfig();
+        ConfigurationFileManager.getInstance().reloadConfig();
+        sender.sendMessage(RELOADED);
         return true;
     }
 

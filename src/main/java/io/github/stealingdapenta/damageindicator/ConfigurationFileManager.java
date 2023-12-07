@@ -35,6 +35,11 @@ public class ConfigurationFileManager {
         plugin.saveConfig();
     }
 
+    public void reloadConfig() {
+        JavaPlugin plugin = DamageIndicator.getInstance();
+        plugin.reloadConfig();
+    }
+
     public boolean getBooleanValue(DefaultConfigValue key) {
         return getBooleanValue(key.name().toLowerCase());
     }
