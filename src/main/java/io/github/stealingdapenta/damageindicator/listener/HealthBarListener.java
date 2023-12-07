@@ -221,7 +221,7 @@ public class HealthBarListener implements Listener {
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
-        double percentDead = maxHealth - (currentHealth / maxHealth);
+        double percentDead = 1 - (currentHealth / maxHealth);
         int deadBarLength = Math.max(0, (int) Math.round(percentDead * 16));
         int aliveBarLength = Math.max(1, 16 - deadBarLength);
 
