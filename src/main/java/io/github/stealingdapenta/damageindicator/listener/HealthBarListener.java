@@ -20,6 +20,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
@@ -36,6 +37,7 @@ public class HealthBarListener implements Listener {
     private static final int MIN_SECONDS = 1;
     private static final int MAX_SECONDS = 10;
     private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
+    private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
     private final HashMap<LivingEntity, Component> originalEntityNames = new HashMap<>();
     private final ConfigurationFileManager cfm;
 
@@ -54,24 +56,48 @@ public class HealthBarListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void removeHologramsUponDeath(EntityDeathEvent event) {
+        if (!cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
+
+        LivingEntity livingEntity = event.getEntity();
+        cancelHologramFor(livingEntity);
+    }
+
+    private void cancelHologramFor(LivingEntity livingEntity) {
+        LivingEntityTaskInfo taskInfo = entitiesWithActiveHologramBars.get(livingEntity);
+        if (Objects.nonNull(taskInfo)) {
+            if (Objects.nonNull(taskInfo.getTask()) && (!taskInfo.getTask().isCancelled())) {
+                taskInfo.getTask().cancel();
+            }
+            if (Objects.nonNull(taskInfo.getArmorStand()) && taskInfo.getArmorStand().isValid()) {
+                taskInfo.getArmorStand().remove();
+            }
+            entitiesWithActiveHologramBars.remove(livingEntity);
+        }
+    }
+
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
-
-        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
-        if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
-            existingHealthBarTask.cancel();
-            entitiesWithActiveHealthBars.remove(livingEntity);
-        }
 
         double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
         Component name = createHealthBar(currentHealth, maxHealth);
 
         if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
-            BukkitTask displayBarTask = displayHologramBar(livingEntity, name);
-            entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
+            cancelHologramFor(livingEntity);
+            LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, name);
+            entitiesWithActiveHologramBars.put(livingEntity, newTaskInfo);
+
         } else {
+            BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
+            if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
+                existingHealthBarTask.cancel();
+                entitiesWithActiveHealthBars.remove(livingEntity);
+            }
+
             BukkitTask displayBarTask = getDisplayBarTask(livingEntity);
             entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
 
@@ -83,9 +109,10 @@ public class HealthBarListener implements Listener {
         }
     }
 
-    private BukkitTask displayHologramBar(LivingEntity livingEntity, Component name) {
-        return new BukkitRunnable() {
-            final ArmorStand armorStand = createArmorStandHologram(locationAboveEntity(livingEntity), name);
+    private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
+        final ArmorStand armorStand = createArmorStandHologram(locationAboveEntity(livingEntity), name);
+
+        BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
 
             @Override
@@ -93,6 +120,7 @@ public class HealthBarListener implements Listener {
                 if (armorStand.isValid()) {
                     DamageIndicator.getInstance().getLogger().info("Cancelling task, and removing valid armor stand");
                     armorStand.remove();
+                    entitiesWithActiveHologramBars.remove(livingEntity);
                 } else {
                     DamageIndicator.getInstance().getLogger().info("Cancelling task, but invalid armor stand");
                 }
@@ -113,6 +141,8 @@ public class HealthBarListener implements Listener {
                 ticks++;
             }
         }.runTaskTimer(DamageIndicator.getInstance(), 0, 1);
+
+        return new LivingEntityTaskInfo(task, armorStand);
     }
 
     private BukkitTask getDisplayBarTask(LivingEntity entity) {
@@ -147,18 +177,6 @@ public class HealthBarListener implements Listener {
             armorStand.setGravity(false);
             armorStand.setSmall(true);
             armorStand.getPersistentDataContainer().set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
-        });
-    }
-
-    private void cancelDeadTasks() {
-        entitiesWithActiveHealthBars.forEach((livingEntity, bukkitTask) -> {
-            if (Objects.isNull(livingEntity) || !livingEntity.isValid()) {
-                if (!bukkitTask.isCancelled()) {
-                    bukkitTask.cancel();
-                }
-                entitiesWithActiveHealthBars.remove(livingEntity);
-                originalEntityNames.remove(livingEntity);
-            }
         });
     }
 
