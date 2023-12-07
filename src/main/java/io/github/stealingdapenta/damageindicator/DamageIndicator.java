@@ -1,17 +1,20 @@
 package io.github.stealingdapenta.damageindicator;
 
+import io.github.stealingdapenta.damageindicator.command.ReloadConfigCommand;
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Objects;
+
 
 public class DamageIndicator extends JavaPlugin {
     private static DamageIndicator instance = null;
 
-    // Listeners
     private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();
     private final HealthBarListener healthBarListener = new HealthBarListener();
+    private final ReloadConfigCommand reloadConfigCommand = new ReloadConfigCommand();
 
     public static DamageIndicator getInstance() {
         return instance;
@@ -22,6 +25,9 @@ public class DamageIndicator extends JavaPlugin {
         instance = this;
 
         ConfigurationFileManager.getInstance().loadConfig();
+
+        Objects.requireNonNull(this.getCommand("reload")).setExecutor(reloadConfigCommand);
+
 
         enableDamageIndicator();
         enableHealthBar();
