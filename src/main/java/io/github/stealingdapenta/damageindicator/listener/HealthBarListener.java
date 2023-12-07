@@ -45,39 +45,6 @@ public class HealthBarListener implements Listener {
         cfm = ConfigurationFileManager.getInstance();
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void restoreNameUponDeath(EntityDeathEvent event) {
-        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
-
-        LivingEntity livingEntity = event.getEntity();
-        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
-        if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
-            existingHealthBarTask.cancel();
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void removeHologramsUponDeath(EntityDeathEvent event) {
-        if (!cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
-
-        LivingEntity livingEntity = event.getEntity();
-        cancelHologramFor(livingEntity);
-    }
-
-    private void cancelHologramFor(LivingEntity livingEntity) {
-        LivingEntityTaskInfo taskInfo = entitiesWithActiveHologramBars.get(livingEntity);
-        if (Objects.nonNull(taskInfo)) {
-            if (Objects.nonNull(taskInfo.getTask()) && (!taskInfo.getTask().isCancelled())) {
-                taskInfo.getTask().cancel();
-            }
-            if (Objects.nonNull(taskInfo.getArmorStand()) && taskInfo.getArmorStand().isValid()) {
-                taskInfo.getArmorStand().remove();
-            }
-            entitiesWithActiveHologramBars.remove(livingEntity);
-        }
-    }
-
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
@@ -109,6 +76,41 @@ public class HealthBarListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void handleDeathEvents(EntityDeathEvent event) {
+        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
+            removeHologramsUponDeath(event);
+        } else {
+            restoreNameUponDeath(event);
+        }
+    }
+
+    private void restoreNameUponDeath(EntityDeathEvent event) {
+        LivingEntity livingEntity = event.getEntity();
+        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
+        if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
+            existingHealthBarTask.cancel();
+        }
+    }
+
+    private void removeHologramsUponDeath(EntityDeathEvent event) {
+        LivingEntity livingEntity = event.getEntity();
+        cancelHologramFor(livingEntity);
+    }
+
+    private void cancelHologramFor(LivingEntity livingEntity) {
+        LivingEntityTaskInfo taskInfo = entitiesWithActiveHologramBars.get(livingEntity);
+        if (Objects.nonNull(taskInfo)) {
+            if (Objects.nonNull(taskInfo.getTask()) && (!taskInfo.getTask().isCancelled())) {
+                taskInfo.getTask().cancel();
+            }
+            if (Objects.nonNull(taskInfo.getArmorStand()) && taskInfo.getArmorStand().isValid()) {
+                taskInfo.getArmorStand().remove();
+            }
+            entitiesWithActiveHologramBars.remove(livingEntity);
+        }
+    }
+
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
         final ArmorStand armorStand = createArmorStandHologram(locationAboveEntity(livingEntity), name);
 
@@ -118,11 +120,10 @@ public class HealthBarListener implements Listener {
             @Override
             public synchronized void cancel() throws IllegalStateException {
                 if (armorStand.isValid()) {
-                    DamageIndicator.getInstance().getLogger().info("Cancelling task, and removing valid armor stand");
                     armorStand.remove();
                     entitiesWithActiveHologramBars.remove(livingEntity);
                 } else {
-                    DamageIndicator.getInstance().getLogger().info("Cancelling task, but invalid armor stand");
+                    DamageIndicator.getInstance().getLogger().warning("Cancelling task, but invalid armor stand");
                 }
                 super.cancel();
             }
