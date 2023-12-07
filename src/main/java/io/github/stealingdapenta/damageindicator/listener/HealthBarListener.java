@@ -27,9 +27,18 @@ import java.util.Objects;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_BOLD;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_COLOR;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_COLOR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_COLOR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
 
@@ -219,7 +228,7 @@ public class HealthBarListener implements Listener {
         TextComponent aliveComponent = buildAliveComponent(aliveBarLength);
         TextComponent deadComponent = buildDeadComponent(deadBarLength);
 
-        return applyConfigStyles(aliveComponent.append(deadComponent));
+        return getPrefix().append(applyStyles(aliveComponent.append(deadComponent), HEALTH_BAR_BOLD, HEALTH_BAR_STRIKETHROUGH, HEALTH_BAR_UNDERLINED)).append(getSuffix());
     }
 
     private TextComponent buildAliveComponent(int barLength) {
@@ -230,19 +239,30 @@ public class HealthBarListener implements Listener {
         return Component.text(cfm.getStringValue(HEALTH_BAR_DEAD_SYMBOL).repeat(barLength), cfm.getTextColor(HEALTH_BAR_DEAD_COLOR));
     }
 
-    private Component applyConfigStyles(TextComponent healthBar) {
-        if (cfm.getBooleanValue(DefaultConfigValue.HEALTH_BAR_BOLD)) {
-            healthBar = healthBar.decorate(TextDecoration.BOLD);
+
+    private Component applyStyles(Component component, DefaultConfigValue boldConfig, DefaultConfigValue strikethroughConfig, DefaultConfigValue underlinedConfig) {
+        if (cfm.getBooleanValue(boldConfig)) {
+            component = component.decorate(TextDecoration.BOLD);
         }
 
-        if (cfm.getBooleanValue(HEALTH_BAR_STRIKETHROUGH)) {
-            healthBar = healthBar.decorate(TextDecoration.STRIKETHROUGH);
+        if (cfm.getBooleanValue(strikethroughConfig)) {
+            component = component.decorate(TextDecoration.STRIKETHROUGH);
         }
 
-        if (cfm.getBooleanValue(HEALTH_BAR_UNDERLINED)) {
-            healthBar = healthBar.decorate(TextDecoration.UNDERLINED);
+        if (cfm.getBooleanValue(underlinedConfig)) {
+            component = component.decorate(TextDecoration.UNDERLINED);
         }
 
-        return healthBar;
+        return component;
+    }
+
+    private Component getPrefix() {
+        Component prefix = Component.text(cfm.getStringValue(HEALTH_BAR_PREFIX), cfm.getTextColor(HEALTH_BAR_PREFIX_COLOR));
+        return applyStyles(prefix, DefaultConfigValue.HEALTH_BAR_PREFIX_BOLD, HEALTH_BAR_PREFIX_STRIKETHROUGH, HEALTH_BAR_PREFIX_UNDERLINED);
+    }
+
+    private Component getSuffix() {
+        Component suffix = Component.text(cfm.getStringValue(HEALTH_BAR_SUFFIX), cfm.getTextColor(HEALTH_BAR_SUFFIX_COLOR));
+        return applyStyles(suffix, DefaultConfigValue.HEALTH_BAR_SUFFIX_BOLD, HEALTH_BAR_SUFFIX_STRIKETHROUGH, HEALTH_BAR_SUFFIX_UNDERLINED);
     }
 }
