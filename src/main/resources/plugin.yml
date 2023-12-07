@@ -4,3 +4,9 @@ main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
 description: The best Damage Indicator in the game!
 api-version: 1.20
+
+commands:
+  reload:
+    description: Reload the configuration file without having to reboot the server.
+    usage: /<command>
+    aliases: [config, load, restart]
