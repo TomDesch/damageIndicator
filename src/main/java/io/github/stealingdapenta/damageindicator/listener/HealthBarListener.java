@@ -13,6 +13,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.persistence.PersistentDataType;
@@ -60,12 +61,15 @@ public class HealthBarListener implements Listener {
 
         } else {
             BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
-            if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
-                existingHealthBarTask.cancel();
+            if (Objects.nonNull(existingHealthBarTask)) {
+                if (!existingHealthBarTask.isCancelled()) {
+                    existingHealthBarTask.cancel();
+                }
+                resetEntityName(livingEntity);
                 entitiesWithActiveHealthBars.remove(livingEntity);
             }
 
-            BukkitTask displayBarTask = getDisplayBarTask(livingEntity);
+            BukkitTask displayBarTask = displayNameBar(livingEntity);
             entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
 
             Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
@@ -74,6 +78,19 @@ public class HealthBarListener implements Listener {
             livingEntity.customName(name);
             livingEntity.setCustomNameVisible(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
+        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
+        if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer)) return;
+
+        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(killer);
+        if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
+            existingHealthBarTask.cancel();
+        }
+        entitiesWithActiveHealthBars.remove(killer);
+        resetEntityName(killer);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -91,7 +108,10 @@ public class HealthBarListener implements Listener {
         if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
             existingHealthBarTask.cancel();
         }
+        entitiesWithActiveHealthBars.remove(livingEntity);
+        resetEntityName(livingEntity);
     }
+
 
     private void removeHologramsUponDeath(EntityDeathEvent event) {
         LivingEntity livingEntity = event.getEntity();
@@ -146,7 +166,7 @@ public class HealthBarListener implements Listener {
         return new LivingEntityTaskInfo(task, armorStand);
     }
 
-    private BukkitTask getDisplayBarTask(LivingEntity entity) {
+    private BukkitTask displayNameBar(LivingEntity entity) {
         return new BukkitRunnable() {
             @Override
             public synchronized void cancel() throws IllegalStateException {
