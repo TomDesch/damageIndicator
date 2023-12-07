@@ -221,15 +221,16 @@ public class HealthBarListener implements Listener {
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
-        double percentAlive = currentHealth / maxHealth;
-        int aliveBarLength = Math.max(0, (int) (percentAlive * 16));
-        int deadBarLength = Math.max(0, 16 - aliveBarLength);
+        double percentDead = maxHealth - (currentHealth / maxHealth);
+        int deadBarLength = Math.max(0, (int) Math.round(percentDead * 16));
+        int aliveBarLength = Math.max(1, 16 - deadBarLength);
 
         TextComponent aliveComponent = buildAliveComponent(aliveBarLength);
         TextComponent deadComponent = buildDeadComponent(deadBarLength);
 
         return getPrefix().append(applyStyles(aliveComponent.append(deadComponent), HEALTH_BAR_BOLD, HEALTH_BAR_STRIKETHROUGH, HEALTH_BAR_UNDERLINED)).append(getSuffix());
     }
+
 
     private TextComponent buildAliveComponent(int barLength) {
         return Component.text(cfm.getStringValue(HEALTH_BAR_ALIVE_SYMBOL).repeat(barLength), cfm.getTextColor(HEALTH_BAR_ALIVE_COLOR));
