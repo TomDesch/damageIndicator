@@ -8,6 +8,7 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.Map;
 import java.util.Objects;
 
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
@@ -43,5 +44,19 @@ public class HolographUtil {
 
     public Location locationAboveEntity(LivingEntity livingEntity) {
         return livingEntity.getLocation().add(0, livingEntity.getHeight() + cfm.getDouble(HOLOGRAM_POSITION), 0);
+    }
+
+
+    public void cancelHologramFor(LivingEntity livingEntity, Map<LivingEntity, LivingEntityTaskInfo> data) {
+        LivingEntityTaskInfo taskInfo = data.get(livingEntity);
+        if (Objects.nonNull(taskInfo)) {
+            if (Objects.nonNull(taskInfo.getTask()) && (!taskInfo.getTask().isCancelled())) {
+                taskInfo.getTask().cancel();
+            }
+            if (Objects.nonNull(taskInfo.getArmorStand()) && taskInfo.getArmorStand().isValid()) {
+                taskInfo.getArmorStand().remove();
+            }
+        }
+        data.remove(livingEntity);
     }
 }

@@ -51,9 +51,6 @@ public class HealthBarListener implements Listener {
     private final ConfigurationFileManager cfm = ConfigurationFileManager.getInstance();
     private final HolographUtil holographUtil = HolographUtil.getInstance();
 
-    public HealthBarListener() {
-    }
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
@@ -63,7 +60,7 @@ public class HealthBarListener implements Listener {
         Component name = createHealthBar(currentHealth, maxHealth);
 
         if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
-            cancelHologramFor(livingEntity);
+            holographUtil.cancelHologramFor(livingEntity, entitiesWithActiveHologramBars);
             LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, name);
             entitiesWithActiveHologramBars.put(livingEntity, newTaskInfo);
 
@@ -123,20 +120,7 @@ public class HealthBarListener implements Listener {
 
     private void removeHologramsUponDeath(EntityDeathEvent event) {
         LivingEntity livingEntity = event.getEntity();
-        cancelHologramFor(livingEntity);
-    }
-
-    private void cancelHologramFor(LivingEntity livingEntity) {
-        LivingEntityTaskInfo taskInfo = entitiesWithActiveHologramBars.get(livingEntity);
-        if (Objects.nonNull(taskInfo)) {
-            if (Objects.nonNull(taskInfo.getTask()) && (!taskInfo.getTask().isCancelled())) {
-                taskInfo.getTask().cancel();
-            }
-            if (Objects.nonNull(taskInfo.getArmorStand()) && taskInfo.getArmorStand().isValid()) {
-                taskInfo.getArmorStand().remove();
-            }
-            entitiesWithActiveHologramBars.remove(livingEntity);
-        }
+        holographUtil.cancelHologramFor(livingEntity, entitiesWithActiveHologramBars);
     }
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
