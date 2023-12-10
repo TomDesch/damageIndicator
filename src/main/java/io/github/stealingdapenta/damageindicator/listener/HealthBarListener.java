@@ -3,10 +3,11 @@ package io.github.stealingdapenta.damageindicator.listener;
 import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
+import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
+import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
@@ -16,7 +17,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -40,7 +40,6 @@ import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALT
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
@@ -49,10 +48,10 @@ public class HealthBarListener implements Listener {
     private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
     private final HashMap<LivingEntity, Component> originalEntityNames = new HashMap<>();
-    private final ConfigurationFileManager cfm;
+    private final ConfigurationFileManager cfm = ConfigurationFileManager.getInstance();
+    private final HolographUtil holographUtil = HolographUtil.getInstance();
 
     public HealthBarListener() {
-        cfm = ConfigurationFileManager.getInstance();
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -141,7 +140,7 @@ public class HealthBarListener implements Listener {
     }
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
-        final ArmorStand armorStand = createArmorStandHologram(locationAboveEntity(livingEntity), name);
+        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity), name);
 
         BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
@@ -165,7 +164,7 @@ public class HealthBarListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(locationAboveEntity(livingEntity));
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity));
                 }
 
                 ticks++;
@@ -190,24 +189,6 @@ public class HealthBarListener implements Listener {
                 resetEntityName(entity);
             }
         }.runTaskLater(DamageIndicator.getInstance(), getDisplayDurationInTicks());
-    }
-
-    private Location locationAboveEntity(LivingEntity livingEntity) {
-        return livingEntity.getLocation().add(0, livingEntity.getHeight() + cfm.getDouble(HOLOGRAM_POSITION), 0);
-    }
-
-    private ArmorStand createArmorStandHologram(Location initialLocation, Component name) {
-        return initialLocation.getWorld().spawn(initialLocation, ArmorStand.class, armorStand -> {
-            armorStand.customName(name);
-            armorStand.setMarker(true);
-            armorStand.setCustomNameVisible(true);
-            armorStand.setVisible(false);
-            armorStand.setCollidable(false);
-            armorStand.setInvulnerable(true);
-            armorStand.setGravity(false);
-            armorStand.setSmall(true);
-            armorStand.getPersistentDataContainer().set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
-        });
     }
 
     private void resetEntityName(LivingEntity entity) {
