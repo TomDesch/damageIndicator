@@ -30,7 +30,8 @@ public enum DefaultConfigValue {
     HEALTH_BAR_BOLD("true"),
     HEALTH_BAR_UNDERLINED("false"),
     HOLOGRAM_POSITION("-0.3"),
-    ENABLE_HOLOGRAPHIC_CUSTOM_NAMES("true");
+    ENABLE_HOLOGRAPHIC_CUSTOM_NAMES("true"),
+    HOLOGRAM_NAME_POSITION("0");
 
     private final String defaultValue;
 

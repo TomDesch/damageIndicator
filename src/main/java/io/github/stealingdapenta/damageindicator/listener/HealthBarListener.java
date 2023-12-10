@@ -40,6 +40,7 @@ import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALT
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
@@ -85,7 +86,7 @@ public class HealthBarListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
         if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
         if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer)) return;
@@ -124,7 +125,7 @@ public class HealthBarListener implements Listener {
     }
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
-        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity), name);
+        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_POSITION)), name);
 
         BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
@@ -133,10 +134,10 @@ public class HealthBarListener implements Listener {
             public synchronized void cancel() throws IllegalStateException {
                 if (armorStand.isValid()) {
                     armorStand.remove();
-                    entitiesWithActiveHologramBars.remove(livingEntity);
                 } else {
                     DamageIndicator.getInstance().getLogger().warning("Cancelling task, but invalid armor stand");
                 }
+                entitiesWithActiveHologramBars.remove(livingEntity);
                 super.cancel();
             }
 
@@ -148,12 +149,12 @@ public class HealthBarListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity));
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_POSITION)));
                 }
 
                 ticks++;
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, 1);
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, 4);
 
         return new LivingEntityTaskInfo(task, armorStand);
     }

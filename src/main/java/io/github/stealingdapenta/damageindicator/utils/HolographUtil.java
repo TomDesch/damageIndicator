@@ -1,6 +1,5 @@
 package io.github.stealingdapenta.damageindicator.utils;
 
-import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
@@ -11,15 +10,8 @@ import org.bukkit.persistence.PersistentDataType;
 import java.util.Map;
 import java.util.Objects;
 
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
-
 public class HolographUtil {
     private static HolographUtil instance;
-    private final ConfigurationFileManager cfm = ConfigurationFileManager.getInstance();
-
-    private HolographUtil() {
-        // private constructor to enforce singleton pattern
-    }
 
     public static HolographUtil getInstance() {
         if (Objects.isNull(instance)) {
@@ -42,8 +34,8 @@ public class HolographUtil {
         });
     }
 
-    public Location locationAboveEntity(LivingEntity livingEntity) {
-        return livingEntity.getLocation().add(0, livingEntity.getHeight() + cfm.getDouble(HOLOGRAM_POSITION), 0);
+    public Location locationAboveEntity(LivingEntity livingEntity, double position) {
+        return livingEntity.getLocation().add(0, livingEntity.getHeight() + position, 0);
     }
 
 

@@ -1,56 +1,95 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
+import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
+import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntitySpawnEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_NAME_POSITION;
 
 public class CustomNameListener implements Listener {
-    private static final int TICKS_PER_SECOND = 20;
-    private static final int MIN_SECONDS = 1;
-    private static final int MAX_SECONDS = 10;
-    private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
-    private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
-    private final HashMap<LivingEntity, Component> originalEntityNames = new HashMap<>();
+    private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHolographicCustomNames = new HashMap<>();
+    private final HolographUtil holographUtil = HolographUtil.getInstance();
+    private final ConfigurationFileManager cfm = ConfigurationFileManager.getInstance();
 
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void displayHealthBar(EntityDamageEvent event) {
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void replaceCustomName(EntitySpawnEvent event) {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
-//
-//        double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
-//        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
-//        Component name = createHealthBar(currentHealth, maxHealth);
-//
-//        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
-//            cancelHologramFor(livingEntity);
-//            LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, name);
-//            entitiesWithActiveHologramBars.put(livingEntity, newTaskInfo);
-//
-//        } else {
-//            BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
-//            if (Objects.nonNull(existingHealthBarTask)) {
-//                if (!existingHealthBarTask.isCancelled()) {
-//                    existingHealthBarTask.cancel();
-//                }
-//                resetEntityName(livingEntity);
-//                entitiesWithActiveHealthBars.remove(livingEntity);
-//            }
-//
-//            BukkitTask displayBarTask = displayNameBar(livingEntity);
-//            entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
-//
-//            Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
-//            originalEntityNames.put(livingEntity, originalName);
-//
-//            livingEntity.customName(name);
-//            livingEntity.setCustomNameVisible(true);
-//        }
+
+        optionallyReplaceCustomNameWithHolograph(livingEntity);
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void replaceCustomName(ChunkLoadEvent event) {
+        Arrays.stream(event.getChunk().getEntities()).filter(LivingEntity.class::isInstance).map(LivingEntity.class::cast).forEach(this::optionallyReplaceCustomNameWithHolograph);
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void removeHolographicCustomNames(EntityDeathEvent event) {
+        holographUtil.cancelHologramFor(event.getEntity(), entitiesWithActiveHolographicCustomNames);
+    }
+
+    private void optionallyReplaceCustomNameWithHolograph(LivingEntity livingEntity) {
+        if (livingEntity.hasMetadata("NPC")) return;
+        if (livingEntity instanceof ArmorStand) return;
+        if (entitiesWithActiveHolographicCustomNames.containsKey(livingEntity)) return;
+
+        Component customName = livingEntity.customName();
+        boolean isCustomNameVisible = livingEntity.isCustomNameVisible();
+
+        if (isCustomNameVisible && Objects.nonNull(customName)) {
+            livingEntity.setCustomNameVisible(false);
+            LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, customName);
+            entitiesWithActiveHolographicCustomNames.put(livingEntity, newTaskInfo);
+        }
+    }
+
+
+    private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
+        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_NAME_POSITION)), name);
+
+        BukkitTask task = new BukkitRunnable() {
+
+            @Override
+            public synchronized void cancel() throws IllegalStateException {
+                if (armorStand.isValid()) {
+                    armorStand.remove();
+                    entitiesWithActiveHolographicCustomNames.remove(livingEntity);
+                } else {
+                    DamageIndicator.getInstance().getLogger().warning("Cancelling Custom Name task, but invalid armor stand");
+                }
+                super.cancel();
+            }
+
+            @Override
+            public void run() {
+                if (!livingEntity.isValid() || !livingEntity.getChunk().isEntitiesLoaded()) {
+                    this.cancel();
+                    return;
+                }
+
+                if (armorStand.isValid()) {
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_NAME_POSITION)));
+                }
+            }
+        }.runTaskTimer(DamageIndicator.getInstance(), 2, 4);
+
+        return new LivingEntityTaskInfo(task, armorStand);
     }
 }
