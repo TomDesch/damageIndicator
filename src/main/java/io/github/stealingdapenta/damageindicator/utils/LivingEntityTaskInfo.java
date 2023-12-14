@@ -1,4 +1,4 @@
-package io.github.stealingdapenta.damageindicator.listener;
+package io.github.stealingdapenta.damageindicator.utils;
 
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.scheduler.BukkitTask;
