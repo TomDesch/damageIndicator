@@ -24,23 +24,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_BOLD;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_COLOR;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_SYMBOL;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_COLOR;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_COLOR;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.*;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
@@ -89,7 +73,8 @@ public class HealthBarListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
         if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
-        if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer)) return;
+        if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer))
+            return;
 
         BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(killer);
         if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
@@ -154,7 +139,7 @@ public class HealthBarListener implements Listener {
 
                 ticks++;
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, 4);
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, cfm.getInt(HOLOGRAM_FOLLOW_SPEED));
 
         return new LivingEntityTaskInfo(task, armorStand);
     }

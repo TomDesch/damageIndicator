@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_NAME_POSITION;
 
 public class CustomNameListener implements Listener {
@@ -88,7 +89,7 @@ public class CustomNameListener implements Listener {
                     armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_NAME_POSITION)));
                 }
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 2, 4);
+        }.runTaskTimer(DamageIndicator.getInstance(), 2, cfm.getInt(HOLOGRAM_FOLLOW_SPEED));
 
         return new LivingEntityTaskInfo(task, armorStand);
     }
