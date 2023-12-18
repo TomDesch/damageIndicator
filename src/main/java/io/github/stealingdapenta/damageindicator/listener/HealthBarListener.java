@@ -1,10 +1,33 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_BOLD;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_COLOR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_DEAD_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_LENGTH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_COLOR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_PREFIX_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_COLOR;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED;
+import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_POSITION;
+
 import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -19,12 +42,6 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.*;
 
 public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
@@ -103,7 +120,6 @@ public class HealthBarListener implements Listener {
         resetEntityName(livingEntity);
     }
 
-
     private void removeHologramsUponDeath(EntityDeathEvent event) {
         LivingEntity livingEntity = event.getEntity();
         holographUtil.cancelHologramFor(livingEntity, entitiesWithActiveHologramBars);
@@ -172,9 +188,13 @@ public class HealthBarListener implements Listener {
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
+        int healthBarLength = cfm.getInt(HEALTH_BAR_LENGTH);
         double percentDead = 1 - (currentHealth / maxHealth);
-        int deadBarLength = Math.max(0, (int) Math.round(percentDead * 16));
-        int aliveBarLength = Math.max(1, 16 - deadBarLength);
+        int deadBarLength = Math.max(0, (int) Math.round(percentDead * healthBarLength));
+        if (deadBarLength >= healthBarLength) {
+            deadBarLength = healthBarLength - 1;
+        }
+        int aliveBarLength = healthBarLength - deadBarLength;
 
         TextComponent aliveComponent = buildAliveComponent(aliveBarLength);
         TextComponent deadComponent = buildDeadComponent(deadBarLength);
