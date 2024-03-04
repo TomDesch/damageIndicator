@@ -1,7 +1,6 @@
 package io.github.stealingdapenta.damageindicator;
 
 public enum DefaultConfigValue {
-    RELOAD_PERMISSION("damageindicator.reload"),
     ENABLE_DAMAGE_INDICATOR("true"),
     MAGIC("(95, 10, 95)"),
     MELEE("(100, 100, 100)"),

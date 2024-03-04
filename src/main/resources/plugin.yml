@@ -9,4 +9,17 @@ commands:
   reload:
     description: Reload the configuration file without having to reboot the server.
     usage: /<command>
-    aliases: [config, load, restart]
+    aliases: [ config, load, restart ]
+
+  arearemove:
+    description: Remove stuck damage indicator related entities around you.
+    usage: /<command>
+
+
+permissions:
+  damageindicator.reload:
+    description: Allow usage of /config
+    default: op
+  damageindicator.arearemove:
+    description: Allow usage of /arearemove
+    default: op
