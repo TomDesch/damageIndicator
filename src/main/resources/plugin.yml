@@ -12,7 +12,7 @@ commands:
     aliases: [ config, load, restart ]
 
   arearemove:
-    description: Remove stuck damage indicator related entities around you.
+    description: Remove stuck damage indicator related entities around you. This will kill all nearby holographs, but from this plugin only.
     usage: /<command>
 
 
