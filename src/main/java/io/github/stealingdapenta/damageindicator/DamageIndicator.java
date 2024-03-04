@@ -1,13 +1,13 @@
 package io.github.stealingdapenta.damageindicator;
 
+import io.github.stealingdapenta.damageindicator.command.AreaRemoveCommand;
 import io.github.stealingdapenta.damageindicator.command.ReloadConfigCommand;
 import io.github.stealingdapenta.damageindicator.listener.CustomNameListener;
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
+import java.util.Objects;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.Objects;
 
 
 public class DamageIndicator extends JavaPlugin {
@@ -16,6 +16,7 @@ public class DamageIndicator extends JavaPlugin {
     private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();
     private final HealthBarListener healthBarListener = new HealthBarListener();
     private final ReloadConfigCommand reloadConfigCommand = new ReloadConfigCommand();
+    private final AreaRemoveCommand areaRemoveCommand = new AreaRemoveCommand();
     private final CustomNameListener customNamesListener = new CustomNameListener();
 
     public static DamageIndicator getInstance() {
@@ -29,6 +30,8 @@ public class DamageIndicator extends JavaPlugin {
         ConfigurationFileManager.getInstance().loadConfig();
 
         Objects.requireNonNull(this.getCommand("reload")).setExecutor(reloadConfigCommand);
+        Objects.requireNonNull(this.getCommand("arearemove"))
+               .setExecutor(areaRemoveCommand);
 
 
         enableDamageIndicator();
