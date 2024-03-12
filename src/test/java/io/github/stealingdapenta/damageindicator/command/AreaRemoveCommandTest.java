@@ -47,14 +47,14 @@ class AreaRemoveCommandTest {
     }
 
     @Test
-    void onCommand_withNoPlayer_returnsFalse() {
+    void onCommand_withoutPlayer_returnsFalse() {
         boolean result = areaRemoveCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
 
         assertFalse(result);
     }
 
     @Test
-    void onCommand_withNoPermission_returnsTrueWithMessage() {
+    void onCommand_withoutPermission_returnsTrueWithMessage() {
         when(mockPlayer.hasPermission(anyString())).thenReturn(false);
 
         String message = "You don't have the required damageindicator.arearemove to execute this command.";

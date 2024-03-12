@@ -41,7 +41,7 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void loadConfig_nothing_saveDefaultConfig() {
+    void loadConfig_void_saveDefaultConfig() {
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
@@ -61,7 +61,7 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void loadConfig_void_shouldAddDefaultValues() {
+    void loadConfig_void_addsDefaultValues() {
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
@@ -82,7 +82,7 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void loadConfig_void_shouldCopyDefaultsAndSaveConfig() {
+    void loadConfig_void_copiesDefaultsAndSavesConfig() {
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
@@ -101,7 +101,7 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void reloadConfig_void_shouldReloadPluginConfig() {
+    void reloadConfig_void_reloadsPluginConfig() {
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
@@ -194,7 +194,7 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void getIntValue_notAnInt_handleParseError() {
+    void getIntValue_notAnInt_handlesParseError() {
         when(mockConfig.getString(anyString())).thenReturn("not an integer");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {

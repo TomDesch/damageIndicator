@@ -34,7 +34,7 @@ class ReloadConfigCommandTest {
     }
 
     @Test
-    void onCommand_withNoPermission_returnsTrueWithMessage() {
+    void onCommand_withoutPermission_returnsTrueWithMessage() {
         when(mockCommandSender.hasPermission(anyString())).thenReturn(false);
         String message = "You don't have the required damageindicator.reload to execute this command.";
 
