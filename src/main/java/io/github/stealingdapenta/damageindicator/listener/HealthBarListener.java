@@ -126,7 +126,8 @@ public class HealthBarListener implements Listener {
     }
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
-        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_POSITION)), name);
+        final ArmorStand armorStand = holographUtil.createArmorStandHologram(
+                holographUtil.locationAboveEntity(livingEntity, cfm.getDoubleValue(HOLOGRAM_POSITION)), name);
 
         BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
@@ -150,12 +151,12 @@ public class HealthBarListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_POSITION)));
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDoubleValue(HOLOGRAM_POSITION)));
                 }
 
                 ticks++;
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, cfm.getInt(HOLOGRAM_FOLLOW_SPEED));
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, cfm.getIntValue(HOLOGRAM_FOLLOW_SPEED));
 
         return new LivingEntityTaskInfo(task, armorStand);
     }
@@ -183,12 +184,12 @@ public class HealthBarListener implements Listener {
     }
 
     private int getDisplayDurationInTicks() {
-        int displayDuration = cfm.getInt(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
+        int displayDuration = cfm.getIntValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
-        int healthBarLength = cfm.getInt(HEALTH_BAR_LENGTH);
+        int healthBarLength = cfm.getIntValue(HEALTH_BAR_LENGTH);
         double percentDead = 1 - (currentHealth / maxHealth);
         int deadBarLength = Math.max(0, (int) Math.round(percentDead * healthBarLength));
         if (deadBarLength >= healthBarLength) {

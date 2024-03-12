@@ -56,10 +56,12 @@ class ReloadConfigCommandTest {
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
         try (MockedStatic<ConfigurationFileManager> mockedStatic = mockStatic(ConfigurationFileManager.class)) {
+
             mockedStatic.when(ConfigurationFileManager::getInstance)
                         .thenReturn(mockConfigFM);
+
             doNothing().when(mockConfigFM)
-                       .reloadConfig(); // Adjust this line
+                       .reloadConfig();
 
             boolean result = reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
             assertTrue(result);

@@ -62,7 +62,8 @@ public class CustomNameListener implements Listener {
 
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
-        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_NAME_POSITION)), name);
+        final ArmorStand armorStand = holographUtil.createArmorStandHologram(
+                holographUtil.locationAboveEntity(livingEntity, cfm.getDoubleValue(HOLOGRAM_NAME_POSITION)), name);
 
         BukkitTask task = new BukkitRunnable() {
 
@@ -85,10 +86,10 @@ public class CustomNameListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDouble(HOLOGRAM_NAME_POSITION)));
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDoubleValue(HOLOGRAM_NAME_POSITION)));
                 }
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 2, cfm.getInt(HOLOGRAM_FOLLOW_SPEED));
+        }.runTaskTimer(DamageIndicator.getInstance(), 2, cfm.getIntValue(HOLOGRAM_FOLLOW_SPEED));
 
         return new LivingEntityTaskInfo(task, armorStand);
     }
