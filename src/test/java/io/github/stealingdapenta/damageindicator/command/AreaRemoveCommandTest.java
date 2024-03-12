@@ -57,7 +57,7 @@ class AreaRemoveCommandTest {
     void onCommand_withNoPermission_returnsTrueWithMessage() {
         when(mockPlayer.hasPermission(anyString())).thenReturn(false);
 
-        String message = "You don't have the required damageindicator.reload to execute this command.";
+        String message = "You don't have the required damageindicator.arearemove to execute this command.";
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
         boolean result = areaRemoveCommand.onCommand(mockPlayer, mockCommand, LABEL, new String[]{});

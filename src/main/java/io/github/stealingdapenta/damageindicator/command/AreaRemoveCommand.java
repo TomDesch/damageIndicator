@@ -25,7 +25,7 @@ public class AreaRemoveCommand implements CommandExecutor {
             return false;
         }
 
-        if (!sender.hasPermission(Permission.RELOAD.getNode())) {
+        if (!sender.hasPermission(Permission.AREA_REMOVE.getNode())) {
             sender.sendMessage(NO_PERMISSION.formatted(Permission.RELOAD.getNode()));
             return true;
         }
