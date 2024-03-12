@@ -152,6 +152,19 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
+    void getDoubleValue_null_returns0() {
+        when(mockConfig.getString(anyString())).thenReturn(null);
+
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
+
+            double result = configFileManager.getDoubleValue(DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED);
+            assertEquals(0, result);
+        }
+    }
+
+    @Test
     void getDoubleValue_value_returnsAsDouble() {
         double value = 12345D;
         when(mockConfig.getString(anyString())).thenReturn(String.valueOf(value));
@@ -190,6 +203,19 @@ class ConfigurationFileManagerTest {
 
             int result = configFileManager.getIntValue(DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED);
             assertEquals(value, result);
+        }
+    }
+
+    @Test
+    void getIntValue_null_returns0() {
+        when(mockConfig.getString(anyString())).thenReturn(null);
+
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
+
+            int result = configFileManager.getIntValue(DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED);
+            assertEquals(0, result);
         }
     }
 
