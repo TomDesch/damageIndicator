@@ -1,6 +1,7 @@
 package io.github.stealingdapenta.damageindicator.command;
 
-import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
+import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
+import io.github.stealingdapenta.damageindicator.config.Permission;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;

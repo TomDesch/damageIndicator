@@ -1,8 +1,9 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
-import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
+import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
+import io.github.stealingdapenta.damageindicator.config.DefaultConfigValue;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -18,8 +19,6 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class DamageIndicatorListener implements Listener {

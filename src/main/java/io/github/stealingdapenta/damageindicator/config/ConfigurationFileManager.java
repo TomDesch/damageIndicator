@@ -1,10 +1,10 @@
-package io.github.stealingdapenta.damageindicator;
+package io.github.stealingdapenta.damageindicator.config;
 
+import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import java.util.Objects;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.Objects;
 
 public class ConfigurationFileManager {
     private static ConfigurationFileManager instance;

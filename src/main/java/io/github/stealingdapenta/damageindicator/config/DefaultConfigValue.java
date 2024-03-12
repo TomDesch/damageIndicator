@@ -1,4 +1,4 @@
-package io.github.stealingdapenta.damageindicator;
+package io.github.stealingdapenta.damageindicator.config;
 
 public enum DefaultConfigValue {
     ENABLE_DAMAGE_INDICATOR("true"),

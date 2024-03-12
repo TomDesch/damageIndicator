@@ -2,6 +2,8 @@ package io.github.stealingdapenta.damageindicator;
 
 import io.github.stealingdapenta.damageindicator.command.AreaRemoveCommand;
 import io.github.stealingdapenta.damageindicator.command.ReloadConfigCommand;
+import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
+import io.github.stealingdapenta.damageindicator.config.DefaultConfigValue;
 import io.github.stealingdapenta.damageindicator.listener.CustomNameListener;
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;

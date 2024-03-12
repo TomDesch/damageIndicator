@@ -1,9 +1,16 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
-import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
+import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED;
+import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_NAME_POSITION;
+
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
@@ -15,14 +22,6 @@ import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED;
-import static io.github.stealingdapenta.damageindicator.DefaultConfigValue.HOLOGRAM_NAME_POSITION;
 
 public class CustomNameListener implements Listener {
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHolographicCustomNames = new HashMap<>();
