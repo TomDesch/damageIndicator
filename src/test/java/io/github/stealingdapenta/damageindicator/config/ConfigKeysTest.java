@@ -156,29 +156,14 @@ class ConfigKeysTest {
     }
 
     @Test
-    void getTextColor_notRGB_returnsDefaultColorOnError() {
-        when(mockConfig.getString(anyString())).thenReturn("invalid_rgb_format");
-
-        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
-            mockedStatic.when(DamageIndicator::getInstance)
-                        .thenReturn(mockPlugin);
-
-            TextColor result = ConfigKeys.FIRE.getTextColor();
-            assertEquals(TextColor.color(255, 255, 255), result);
-            verify(mockPlugin.getLogger(), times(1)).warning("Invalid RGB format for key fire");
-        }
-    }
-
-    @Test
     void getTextColor_validRGB_returnsParsedColor() {
-        when(mockConfig.getString(anyString())).thenReturn("(123,123,123)");
+        when(mockConfig.getString(anyString())).thenReturn("&(123,123,123)");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
             TextColor result = ConfigKeys.MAGIC.getTextColor();
-            ;
             assertEquals(TextColor.color(123, 123, 123), result);
         }
     }

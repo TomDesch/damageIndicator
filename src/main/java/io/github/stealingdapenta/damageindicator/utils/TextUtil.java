@@ -183,8 +183,7 @@ public class TextUtil {
     }
 
 
-
-    TextColor parseRGB(String input) {
+    public TextColor parseRGB(String input) {
         Matcher matcher = RGB_PATTERN.matcher(input.replace(" ", ""));
 
         if (!matcher.matches()) {

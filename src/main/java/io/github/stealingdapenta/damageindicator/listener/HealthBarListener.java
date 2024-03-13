@@ -2,23 +2,15 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_BOLD;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DEAD_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DISPLAY_DURATION;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_LENGTH;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_PREFIX;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_PREFIX_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_PREFIX_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_POSITION;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import io.github.stealingdapenta.damageindicator.utils.TextUtil;
@@ -27,7 +19,6 @@ import java.util.Map;
 import java.util.Objects;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
@@ -199,7 +190,9 @@ public class HealthBarListener implements Listener {
         TextComponent aliveComponent = buildAliveComponent(aliveBarLength);
         TextComponent deadComponent = buildDeadComponent(deadBarLength);
 
-        return getPrefix().append(applyStyles(aliveComponent.append(deadComponent), HEALTH_BAR_BOLD, HEALTH_BAR_STRIKETHROUGH, HEALTH_BAR_UNDERLINED)).append(getSuffix());
+        return HEALTH_BAR_PREFIX.getFormattedStringValue()
+                                .append(aliveComponent.append(deadComponent))
+                                .append(HEALTH_BAR_SUFFIX.getFormattedStringValue());
     }
 
     private TextComponent buildAliveComponent(int barLength) {
@@ -208,32 +201,5 @@ public class HealthBarListener implements Listener {
 
     private TextComponent buildDeadComponent(int barLength) {
         return textUtil.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.getFormattedStringValue(), barLength);
-    }
-
-
-    private Component applyStyles(Component component, ConfigKeys boldConfig, ConfigKeys strikethroughConfig, ConfigKeys underlinedConfig) {
-        if (boldConfig.getBooleanValue()) {
-            component = component.decorate(TextDecoration.BOLD);
-        }
-
-        if (strikethroughConfig.getBooleanValue()) {
-            component = component.decorate(TextDecoration.STRIKETHROUGH);
-        }
-
-        if (underlinedConfig.getBooleanValue()) {
-            component = component.decorate(TextDecoration.UNDERLINED);
-        }
-
-        return component;
-    }
-
-    private Component getPrefix() {
-        return applyStyles(HEALTH_BAR_PREFIX.getFormattedStringValue(), ConfigKeys.HEALTH_BAR_PREFIX_BOLD, HEALTH_BAR_PREFIX_STRIKETHROUGH,
-                           HEALTH_BAR_PREFIX_UNDERLINED);
-    }
-
-    private Component getSuffix() {
-        return applyStyles(HEALTH_BAR_SUFFIX.getFormattedStringValue(), ConfigKeys.HEALTH_BAR_SUFFIX_BOLD, HEALTH_BAR_SUFFIX_STRIKETHROUGH,
-                           HEALTH_BAR_SUFFIX_UNDERLINED);
     }
 }
