@@ -8,7 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Chunk;
@@ -24,7 +23,6 @@ class CustomNameListenerTest {
 
     private CustomNameListener customNameListener;
     private HolographUtil mockHolographUtil;
-    private ConfigurationFileManager mockConfigurationFileManager;
 
     private static void setPrivateFieldUsingReflection(Object target, String fieldName, Object value) {
         try {
@@ -49,7 +47,6 @@ class CustomNameListenerTest {
     void setUp() {
         customNameListener = new CustomNameListener();
         mockHolographUtil = mock(HolographUtil.class);
-        mockConfigurationFileManager = mock(ConfigurationFileManager.class);
 
         setPrivateFieldUsingReflection(customNameListener, "holographUtil", mockHolographUtil);
     }
@@ -67,8 +64,6 @@ class CustomNameListenerTest {
 
         verify(mockHolographUtil, never()).createArmorStandHologram(any(), any());
         verify(livingEntity, never()).setCustomNameVisible(false);
-        verify(mockConfigurationFileManager, never()).getDoubleValue(any());
-        verify(mockConfigurationFileManager, never()).getIntValue(any());
     }
 
     @Test
@@ -80,8 +75,6 @@ class CustomNameListenerTest {
         customNameListener.replaceCustomName(spawnEvent);
 
         verify(mockHolographUtil, never()).createArmorStandHologram(any(), any());
-        verify(mockConfigurationFileManager, never()).getDoubleValue(any());
-        verify(mockConfigurationFileManager, never()).getIntValue(any());
     }
 
     @Test
@@ -96,8 +89,6 @@ class CustomNameListenerTest {
         customNameListener.replaceCustomName(chunkLoadEvent);
 
         verify(mockHolographUtil, never()).createArmorStandHologram(any(), any());
-        verify(mockConfigurationFileManager, never()).getDoubleValue(any());
-        verify(mockConfigurationFileManager, never()).getIntValue(any());
     }
 
     @Test

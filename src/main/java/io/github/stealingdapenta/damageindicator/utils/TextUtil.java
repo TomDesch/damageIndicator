@@ -171,6 +171,17 @@ public class TextUtil {
                                 .matches();
     }
 
+    public TextComponent repeatTextWithStyles(TextComponent textComponent, int times) {
+        StringBuilder repeatedText = new StringBuilder();
+        for (int i = 0; i < times; i++) {
+            repeatedText.append(textComponent.content());
+        }
+
+        return textComponent.toBuilder()
+                            .content(repeatedText.toString())
+                            .build();
+    }
+
 
     TextColor parseRGB(String input) {
         Matcher matcher = RGB_PATTERN.matcher(input.replace(" ", ""));

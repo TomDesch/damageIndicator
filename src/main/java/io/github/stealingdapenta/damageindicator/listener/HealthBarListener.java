@@ -1,19 +1,16 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_ALIVE_COLOR;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_BOLD;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_DEAD_COLOR;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_DEAD_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_LENGTH;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX_COLOR;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX_COLOR;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
@@ -21,10 +18,10 @@ import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValu
 import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_POSITION;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.config.DefaultConfigValue;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -50,7 +47,7 @@ public class HealthBarListener implements Listener {
     private final HashMap<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
     private final HashMap<LivingEntity, Component> originalEntityNames = new HashMap<>();
-    private final ConfigurationFileManager cfm = ConfigurationFileManager.getInstance();
+    private final TextUtil textUtil = TextUtil.getInstance();
     private final HolographUtil holographUtil = HolographUtil.getInstance();
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -61,7 +58,7 @@ public class HealthBarListener implements Listener {
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
         Component name = createHealthBar(currentHealth, maxHealth);
 
-        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
             holographUtil.cancelHologramFor(livingEntity, entitiesWithActiveHologramBars);
             LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, name);
             entitiesWithActiveHologramBars.put(livingEntity, newTaskInfo);
@@ -89,7 +86,9 @@ public class HealthBarListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
-        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) return;
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
+            return;
+        }
         if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer))
             return;
 
@@ -103,7 +102,7 @@ public class HealthBarListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void handleDeathEvents(EntityDeathEvent event) {
-        if (cfm.getBooleanValue(ENABLE_HOLOGRAM_HEALTH_BAR)) {
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
             removeHologramsUponDeath(event);
         } else {
             restoreNameUponDeath(event);
@@ -127,7 +126,7 @@ public class HealthBarListener implements Listener {
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
         final ArmorStand armorStand = holographUtil.createArmorStandHologram(
-                holographUtil.locationAboveEntity(livingEntity, cfm.getDoubleValue(HOLOGRAM_POSITION)), name);
+                holographUtil.locationAboveEntity(livingEntity, HOLOGRAM_POSITION.getDoubleValue()), name);
 
         BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
@@ -151,12 +150,12 @@ public class HealthBarListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, cfm.getDoubleValue(HOLOGRAM_POSITION)));
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, HOLOGRAM_POSITION.getDoubleValue()));
                 }
 
                 ticks++;
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, cfm.getIntValue(HOLOGRAM_FOLLOW_SPEED));
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.getIntValue());
 
         return new LivingEntityTaskInfo(task, armorStand);
     }
@@ -184,12 +183,12 @@ public class HealthBarListener implements Listener {
     }
 
     private int getDisplayDurationInTicks() {
-        int displayDuration = cfm.getIntValue(DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION);
+        int displayDuration = HEALTH_BAR_DISPLAY_DURATION.getIntValue();
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
-        int healthBarLength = cfm.getIntValue(HEALTH_BAR_LENGTH);
+        int healthBarLength = HEALTH_BAR_LENGTH.getIntValue();
         double percentDead = 1 - (currentHealth / maxHealth);
         int deadBarLength = Math.max(0, (int) Math.round(percentDead * healthBarLength));
         if (deadBarLength >= healthBarLength) {
@@ -203,26 +202,25 @@ public class HealthBarListener implements Listener {
         return getPrefix().append(applyStyles(aliveComponent.append(deadComponent), HEALTH_BAR_BOLD, HEALTH_BAR_STRIKETHROUGH, HEALTH_BAR_UNDERLINED)).append(getSuffix());
     }
 
-
     private TextComponent buildAliveComponent(int barLength) {
-        return Component.text(cfm.getStringValue(HEALTH_BAR_ALIVE_SYMBOL).repeat(barLength), cfm.getTextColor(HEALTH_BAR_ALIVE_COLOR));
+        return textUtil.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.getFormattedStringValue(), barLength);
     }
 
     private TextComponent buildDeadComponent(int barLength) {
-        return Component.text(cfm.getStringValue(HEALTH_BAR_DEAD_SYMBOL).repeat(barLength), cfm.getTextColor(HEALTH_BAR_DEAD_COLOR));
+        return textUtil.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.getFormattedStringValue(), barLength);
     }
 
 
     private Component applyStyles(Component component, DefaultConfigValue boldConfig, DefaultConfigValue strikethroughConfig, DefaultConfigValue underlinedConfig) {
-        if (cfm.getBooleanValue(boldConfig)) {
+        if (boldConfig.getBooleanValue()) {
             component = component.decorate(TextDecoration.BOLD);
         }
 
-        if (cfm.getBooleanValue(strikethroughConfig)) {
+        if (strikethroughConfig.getBooleanValue()) {
             component = component.decorate(TextDecoration.STRIKETHROUGH);
         }
 
-        if (cfm.getBooleanValue(underlinedConfig)) {
+        if (underlinedConfig.getBooleanValue()) {
             component = component.decorate(TextDecoration.UNDERLINED);
         }
 
@@ -230,12 +228,12 @@ public class HealthBarListener implements Listener {
     }
 
     private Component getPrefix() {
-        Component prefix = Component.text(cfm.getStringValue(HEALTH_BAR_PREFIX), cfm.getTextColor(HEALTH_BAR_PREFIX_COLOR));
-        return applyStyles(prefix, DefaultConfigValue.HEALTH_BAR_PREFIX_BOLD, HEALTH_BAR_PREFIX_STRIKETHROUGH, HEALTH_BAR_PREFIX_UNDERLINED);
+        return applyStyles(HEALTH_BAR_PREFIX.getFormattedStringValue(), DefaultConfigValue.HEALTH_BAR_PREFIX_BOLD, HEALTH_BAR_PREFIX_STRIKETHROUGH,
+                           HEALTH_BAR_PREFIX_UNDERLINED);
     }
 
     private Component getSuffix() {
-        Component suffix = Component.text(cfm.getStringValue(HEALTH_BAR_SUFFIX), cfm.getTextColor(HEALTH_BAR_SUFFIX_COLOR));
-        return applyStyles(suffix, DefaultConfigValue.HEALTH_BAR_SUFFIX_BOLD, HEALTH_BAR_SUFFIX_STRIKETHROUGH, HEALTH_BAR_SUFFIX_UNDERLINED);
+        return applyStyles(HEALTH_BAR_SUFFIX.getFormattedStringValue(), DefaultConfigValue.HEALTH_BAR_SUFFIX_BOLD, HEALTH_BAR_SUFFIX_STRIKETHROUGH,
+                           HEALTH_BAR_SUFFIX_UNDERLINED);
     }
 }
