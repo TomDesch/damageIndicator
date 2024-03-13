@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
@@ -59,6 +60,14 @@ class TextUtilTest {
         assertTrue(matcher.matches());
         assertNull(matcher.group(1));
         assertEquals("b", matcher.group(2));
+    }
+
+    @Test
+    void combineTextComponents_EmptyList_IllegalArgumentExceptionThrown() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                                                          () -> textUtil.combineTextComponents(Collections.emptyList()));
+
+        assertEquals("At least one TextComponent must be provided", exception.getMessage());
     }
 
 
@@ -190,6 +199,43 @@ class TextUtilTest {
 
         TextComponent expected = Component.text(input);
         assertEquals(expected, result);
+    }
+
+    @Test
+    void parseRGBComponent_InvalidComponent_NumberFormatExceptionThrown() {
+        String invalidComponent = "invalid";
+        assertThrows(IllegalArgumentException.class, () -> textUtil.parseRGBComponent(invalidComponent));
+    }
+
+    @Test
+    void repeatTextWithStyles_SingleRepetition_NoStylesChanged() {
+        TextComponent originalComponent = Component.text("Hello")
+                                                   .color(TextColor.color(255, 0, 0));
+        int times = 1;
+
+        TextComponent repeatedComponent = textUtil.repeatTextWithStyles(originalComponent, times);
+
+        assertEquals(originalComponent, repeatedComponent);
+    }
+
+    @Test
+    void repeatTextWithStyles_MultipleRepetitions_StylesPreserved() {
+        TextComponent originalComponent = Component.text("Hello")
+                                                   .color(TextColor.color(255, 123, 0));
+        int times = 3;
+
+        TextComponent repeatedComponent = textUtil.repeatTextWithStyles(originalComponent, times);
+
+        assertEquals(originalComponent.content() + originalComponent.content() + originalComponent.content(), repeatedComponent.content());
+        assertEquals(originalComponent.style(), repeatedComponent.style());
+    }
+
+    @Test
+    void repeatTextWithStyles_ZeroRepetitions_ExceptionThrown() {
+        TextComponent originalComponent = Component.text("Hello");
+        int times = 0;
+
+        assertThrows(IllegalArgumentException.class, () -> textUtil.repeatTextWithStyles(originalComponent, times));
     }
 
     private Style resetStyle() {

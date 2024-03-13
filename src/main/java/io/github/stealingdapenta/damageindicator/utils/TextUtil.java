@@ -145,7 +145,7 @@ public class TextUtil {
                         .toArray(result);
     }
 
-    private TextComponent combineTextComponents(List<TextComponent> textComponents) {
+    TextComponent combineTextComponents(List<TextComponent> textComponents) {
         if (textComponents.isEmpty()) {
             throw new IllegalArgumentException("At least one TextComponent must be provided");
         }
@@ -172,15 +172,16 @@ public class TextUtil {
     }
 
     public TextComponent repeatTextWithStyles(TextComponent textComponent, int times) {
-        StringBuilder repeatedText = new StringBuilder();
-        for (int i = 0; i < times; i++) {
-            repeatedText.append(textComponent.content());
+        if (times <= 0) {
+            throw new IllegalArgumentException("Number of repetitions should be greater than zero.");
         }
 
         return textComponent.toBuilder()
-                            .content(repeatedText.toString())
+                            .content(textComponent.content()
+                                                  .repeat(times))
                             .build();
     }
+
 
 
     TextColor parseRGB(String input) {
@@ -201,7 +202,7 @@ public class TextUtil {
         return TextColor.color(toValidRGB(red), toValidRGB(green), toValidRGB(blue));
     }
 
-    private int parseRGBComponent(String component) {
+    int parseRGBComponent(String component) {
         try {
             return Integer.parseInt(component);
         } catch (NumberFormatException e) {
