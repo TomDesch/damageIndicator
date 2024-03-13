@@ -1,7 +1,7 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_NAME_POSITION;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_NAME_POSITION;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;

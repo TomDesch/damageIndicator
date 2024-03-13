@@ -26,7 +26,7 @@ public class ConfigurationFileManager {
         FileConfiguration configuration = plugin.getConfig();
 
         // set default configurations
-        for (DefaultConfigValue defaultConfig : DefaultConfigValue.values()) {
+        for (ConfigKeys defaultConfig : ConfigKeys.values()) {
             configuration.addDefault(defaultConfig.name()
                                                   .toLowerCase(), defaultConfig.getDefaultValue());
         }

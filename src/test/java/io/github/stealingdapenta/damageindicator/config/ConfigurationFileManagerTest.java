@@ -51,7 +51,7 @@ class ConfigurationFileManagerTest {
             configFileManager.loadConfig();
 
             verify(mockPlugin, times(1)).saveDefaultConfig();
-            verify(mockConfig, times(DefaultConfigValue.values().length)).addDefault(anyString(), any());
+            verify(mockConfig, times(ConfigKeys.values().length)).addDefault(anyString(), any());
             verify(optionsStub, times(1)).copyDefaults(true);
         }
     }
@@ -70,7 +70,7 @@ class ConfigurationFileManagerTest {
 
             configFileManager.loadConfig();
 
-            for (DefaultConfigValue defaultConfig : DefaultConfigValue.values()) {
+            for (ConfigKeys defaultConfig : ConfigKeys.values()) {
                 verify(mockConfig, times(1)).addDefault(defaultConfig.name()
                                                                      .toLowerCase(), defaultConfig.getDefaultValue());
             }

@@ -1,7 +1,7 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.config.DefaultConfigValue;
+import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
@@ -73,12 +73,12 @@ public class DamageIndicatorListener implements Listener {
 
     private TextColor calculateColor(EntityDamageEvent.DamageCause cause) {
         return switch (cause) {
-            case MAGIC -> DefaultConfigValue.MAGIC.getTextColor();
-            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> DefaultConfigValue.MELEE.getTextColor();
-            case POISON -> DefaultConfigValue.POISON.getTextColor();
-            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> DefaultConfigValue.FIRE.getTextColor();
-            case PROJECTILE -> DefaultConfigValue.RANGED.getTextColor();
-            default -> DefaultConfigValue.OTHER.getTextColor();
+            case MAGIC -> ConfigKeys.MAGIC.getTextColor();
+            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> ConfigKeys.MELEE.getTextColor();
+            case POISON -> ConfigKeys.POISON.getTextColor();
+            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> ConfigKeys.FIRE.getTextColor();
+            case PROJECTILE -> ConfigKeys.RANGED.getTextColor();
+            default -> ConfigKeys.OTHER.getTextColor();
         };
     }
 

@@ -7,7 +7,7 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public enum DefaultConfigValue {
+public enum ConfigKeys {
     ENABLE_DAMAGE_INDICATOR("true"),
     MAGIC("(95,10,95)"),
     MELEE("(100,100,100)"),
@@ -42,7 +42,7 @@ public enum DefaultConfigValue {
 
     private static final TextUtil textUtil = TextUtil.getInstance();
 
-    DefaultConfigValue(String defaultValue) {
+    ConfigKeys(String defaultValue) {
         this.defaultValue = defaultValue;
     }
 

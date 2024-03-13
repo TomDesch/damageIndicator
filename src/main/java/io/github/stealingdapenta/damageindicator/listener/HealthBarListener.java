@@ -1,24 +1,24 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.ENABLE_HOLOGRAM_HEALTH_BAR;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_BOLD;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_DEAD_SYMBOL;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_DISPLAY_DURATION;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_LENGTH;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_PREFIX_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_SUFFIX_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HEALTH_BAR_UNDERLINED;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED;
-import static io.github.stealingdapenta.damageindicator.config.DefaultConfigValue.HOLOGRAM_POSITION;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_BOLD;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DEAD_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DISPLAY_DURATION;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_LENGTH;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_PREFIX;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_PREFIX_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_PREFIX_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX_STRIKETHROUGH;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_UNDERLINED;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_POSITION;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.config.DefaultConfigValue;
+import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import io.github.stealingdapenta.damageindicator.utils.TextUtil;
@@ -211,7 +211,7 @@ public class HealthBarListener implements Listener {
     }
 
 
-    private Component applyStyles(Component component, DefaultConfigValue boldConfig, DefaultConfigValue strikethroughConfig, DefaultConfigValue underlinedConfig) {
+    private Component applyStyles(Component component, ConfigKeys boldConfig, ConfigKeys strikethroughConfig, ConfigKeys underlinedConfig) {
         if (boldConfig.getBooleanValue()) {
             component = component.decorate(TextDecoration.BOLD);
         }
@@ -228,12 +228,12 @@ public class HealthBarListener implements Listener {
     }
 
     private Component getPrefix() {
-        return applyStyles(HEALTH_BAR_PREFIX.getFormattedStringValue(), DefaultConfigValue.HEALTH_BAR_PREFIX_BOLD, HEALTH_BAR_PREFIX_STRIKETHROUGH,
+        return applyStyles(HEALTH_BAR_PREFIX.getFormattedStringValue(), ConfigKeys.HEALTH_BAR_PREFIX_BOLD, HEALTH_BAR_PREFIX_STRIKETHROUGH,
                            HEALTH_BAR_PREFIX_UNDERLINED);
     }
 
     private Component getSuffix() {
-        return applyStyles(HEALTH_BAR_SUFFIX.getFormattedStringValue(), DefaultConfigValue.HEALTH_BAR_SUFFIX_BOLD, HEALTH_BAR_SUFFIX_STRIKETHROUGH,
+        return applyStyles(HEALTH_BAR_SUFFIX.getFormattedStringValue(), ConfigKeys.HEALTH_BAR_SUFFIX_BOLD, HEALTH_BAR_SUFFIX_STRIKETHROUGH,
                            HEALTH_BAR_SUFFIX_UNDERLINED);
     }
 }

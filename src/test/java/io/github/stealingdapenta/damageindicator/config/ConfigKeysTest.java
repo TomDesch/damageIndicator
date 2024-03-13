@@ -18,7 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
-class DefaultConfigValueTest {
+class ConfigKeysTest {
 
     private DamageIndicator mockPlugin;
 
@@ -41,7 +41,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            boolean result = DefaultConfigValue.ENABLE_DAMAGE_INDICATOR.getBooleanValue();
+            boolean result = ConfigKeys.ENABLE_DAMAGE_INDICATOR.getBooleanValue();
             assertTrue(result);
         }
     }
@@ -54,7 +54,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            boolean result = DefaultConfigValue.ENABLE_DAMAGE_INDICATOR.getBooleanValue();
+            boolean result = ConfigKeys.ENABLE_DAMAGE_INDICATOR.getBooleanValue();
             assertFalse(result);
         }
     }
@@ -68,7 +68,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            String result = DefaultConfigValue.HEALTH_BAR_ALIVE_SYMBOL.getStringValue();
+            String result = ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL.getStringValue();
             assertEquals(value, result);
         }
     }
@@ -81,7 +81,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            double result = DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
+            double result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
             assertEquals(0, result);
         }
     }
@@ -95,7 +95,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            double result = DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
+            double result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
             assertEquals(value, result);
         }
     }
@@ -108,7 +108,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            double result = DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
+            double result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
             assertEquals(0, result);
             verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for hologram_follow_speed.");
         }
@@ -123,7 +123,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            int result = DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED.getIntValue();
+            int result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getIntValue();
             assertEquals(value, result);
         }
     }
@@ -136,7 +136,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            int result = DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED.getIntValue();
+            int result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getIntValue();
             assertEquals(0, result);
         }
     }
@@ -149,7 +149,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            int result = DefaultConfigValue.HOLOGRAM_FOLLOW_SPEED.getIntValue();
+            int result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getIntValue();
             assertEquals(0, result);
             verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for hologram_follow_speed.");
         }
@@ -163,7 +163,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            TextColor result = DefaultConfigValue.FIRE.getTextColor();
+            TextColor result = ConfigKeys.FIRE.getTextColor();
             assertEquals(TextColor.color(255, 255, 255), result);
             verify(mockPlugin.getLogger(), times(1)).warning("Invalid RGB format for key fire");
         }
@@ -177,7 +177,7 @@ class DefaultConfigValueTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            TextColor result = DefaultConfigValue.MAGIC.getTextColor();
+            TextColor result = ConfigKeys.MAGIC.getTextColor();
             ;
             assertEquals(TextColor.color(123, 123, 123), result);
         }
