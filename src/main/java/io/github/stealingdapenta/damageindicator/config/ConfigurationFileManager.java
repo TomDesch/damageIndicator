@@ -1,7 +1,9 @@
 package io.github.stealingdapenta.damageindicator.config;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.Objects;
+import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -10,6 +12,8 @@ public class ConfigurationFileManager {
 
     private static ConfigurationFileManager instance;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
+
+    private static final TextUtil textUtil = TextUtil.getInstance();
 
     private ConfigurationFileManager() {
     }
@@ -61,6 +65,10 @@ public class ConfigurationFileManager {
                               .getConfig()
                               .getString(key.name()
                                             .toLowerCase());
+    }
+
+    public TextComponent getFormattedStringValue(DefaultConfigValue key) {
+        return textUtil.parseFormattedString(getStringValue(key));
     }
 
     public double getDoubleValue(DefaultConfigValue key) {
