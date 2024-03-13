@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.command;
 
 import static io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener.getCustomNamespacedKey;
 
+import io.github.stealingdapenta.damageindicator.config.Permission;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -24,8 +25,8 @@ public class AreaRemoveCommand implements CommandExecutor {
             return false;
         }
 
-        if (!sender.hasPermission(Permission.RELOAD.getNode())) {
-            sender.sendMessage(NO_PERMISSION.formatted(Permission.RELOAD.getNode()));
+        if (!sender.hasPermission(Permission.AREA_REMOVE.getNode())) {
+            sender.sendMessage(NO_PERMISSION.formatted(Permission.AREA_REMOVE.getNode()));
             return true;
         }
 

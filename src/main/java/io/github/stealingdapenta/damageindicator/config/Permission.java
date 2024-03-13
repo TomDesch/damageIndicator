@@ -1,4 +1,4 @@
-package io.github.stealingdapenta.damageindicator.command;
+package io.github.stealingdapenta.damageindicator.config;
 
 public enum Permission {
     RELOAD("damageindicator.reload"),

@@ -1,8 +1,8 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
-import io.github.stealingdapenta.damageindicator.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.DefaultConfigValue;
+import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -18,8 +18,6 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
-
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 public class DamageIndicatorListener implements Listener {
@@ -74,15 +72,13 @@ public class DamageIndicatorListener implements Listener {
     }
 
     private TextColor calculateColor(EntityDamageEvent.DamageCause cause) {
-        ConfigurationFileManager configManager = ConfigurationFileManager.getInstance();
-
         return switch (cause) {
-            case MAGIC -> configManager.getTextColor(DefaultConfigValue.MAGIC);
-            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> configManager.getTextColor(DefaultConfigValue.MELEE);
-            case POISON -> configManager.getTextColor(DefaultConfigValue.POISON);
-            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> configManager.getTextColor(DefaultConfigValue.FIRE);
-            case PROJECTILE -> configManager.getTextColor(DefaultConfigValue.RANGED);
-            default -> configManager.getTextColor(DefaultConfigValue.OTHER);
+            case MAGIC -> ConfigKeys.MAGIC.getTextColor();
+            case ENTITY_ATTACK, ENTITY_SWEEP_ATTACK, THORNS -> ConfigKeys.MELEE.getTextColor();
+            case POISON -> ConfigKeys.POISON.getTextColor();
+            case FIRE, FIRE_TICK, LAVA, HOT_FLOOR -> ConfigKeys.FIRE.getTextColor();
+            case PROJECTILE -> ConfigKeys.RANGED.getTextColor();
+            default -> ConfigKeys.OTHER.getTextColor();
         };
     }
 
