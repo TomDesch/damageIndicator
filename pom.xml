@@ -5,15 +5,17 @@
 
     <groupId>io.github.stealingdapenta</groupId>
     <artifactId>damageindicator</artifactId>
-    <version>1.2.5</version>
-    <name>damageindicator</name>
-    <description>Minecraft Damage Indicator.</description>
-
     <properties>
         <java.version>17</java.version>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
+    <name>damageindicator</name>
+    <description>Minecraft Damage Indicator.</description>
+
+    <version>1.3.0</version>
 
     <repositories>
         <repository>
