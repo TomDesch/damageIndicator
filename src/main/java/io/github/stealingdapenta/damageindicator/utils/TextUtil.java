@@ -172,7 +172,7 @@ public class TextUtil {
     }
 
     public TextComponent repeatTextWithStyles(TextComponent textComponent, int times) {
-        if (times <= 0) {
+        if (times < 0) {
             throw new IllegalArgumentException("Number of repetitions should be greater than zero.");
         }
 
