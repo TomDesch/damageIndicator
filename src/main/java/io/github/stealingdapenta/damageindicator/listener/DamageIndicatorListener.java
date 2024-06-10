@@ -72,41 +72,13 @@ public class DamageIndicatorListener implements Listener {
     }
 
     private TextColor calculateColor(EntityDamageEvent.DamageCause cause) {
-        return switch (cause) {
-            case MAGIC -> ConfigKeys.MAGIC.getTextColor();
-            case ENTITY_ATTACK -> ConfigKeys.ENTITY_ATTACK.getTextColor();
-            case ENTITY_SWEEP_ATTACK -> ConfigKeys.ENTITY_SWEEP_ATTACK.getTextColor();
-            case THORNS -> ConfigKeys.THORNS.getTextColor();
-            case POISON -> ConfigKeys.POISON.getTextColor();
-            case FIRE -> ConfigKeys.FIRE.getTextColor();
-            case FIRE_TICK -> ConfigKeys.FIRE_TICK.getTextColor();
-            case LAVA -> ConfigKeys.LAVA.getTextColor();
-            case HOT_FLOOR -> ConfigKeys.HOT_FLOOR.getTextColor();
-            case PROJECTILE -> ConfigKeys.PROJECTILE.getTextColor();
-            case FALL -> ConfigKeys.FALL_DAMAGE.getTextColor();
-            case KILL -> ConfigKeys.KILL.getTextColor();
-            case WORLD_BORDER -> ConfigKeys.WORLD_BORDER.getTextColor();
-            case CONTACT -> ConfigKeys.CONTACT.getTextColor();
-            case SUFFOCATION -> ConfigKeys.SUFFOCATION.getTextColor();
-            case DROWNING -> ConfigKeys.DROWNING.getTextColor();
-            case ENTITY_EXPLOSION -> ConfigKeys.ENTITY_EXPLOSION.getTextColor();
-            case BLOCK_EXPLOSION -> ConfigKeys.BLOCK_EXPLOSION.getTextColor();
-            case LIGHTNING -> ConfigKeys.LIGHTNING.getTextColor();
-            case SUICIDE -> ConfigKeys.SUICIDE.getTextColor();
-            case STARVATION -> ConfigKeys.STARVATION.getTextColor();
-            case WITHER -> ConfigKeys.WITHER.getTextColor();
-            case FALLING_BLOCK -> ConfigKeys.FALLING_BLOCK.getTextColor();
-            case DRAGON_BREATH -> ConfigKeys.DRAGON_BREATH.getTextColor();
-            case CUSTOM -> ConfigKeys.CUSTOM.getTextColor();
-            case FLY_INTO_WALL -> ConfigKeys.FLY_INTO_WALL.getTextColor();
-            case CRAMMING -> ConfigKeys.CRAMMING.getTextColor();
-            case DRYOUT -> ConfigKeys.DRYOUT.getTextColor();
-            case FREEZE -> ConfigKeys.FREEZE.getTextColor();
-            case SONIC_BOOM -> ConfigKeys.SONIC_BOOM.getTextColor();
-            default -> ConfigKeys.OTHER.getTextColor();
-        };
+        try {
+            return ConfigKeys.valueOf(cause.name())
+                             .getTextColor();
+        } catch (IllegalArgumentException e) {
+            return ConfigKeys.OTHER.getTextColor();
+        }
     }
-
 
     public void animateArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
         ArmorStand armorStand = this.createArmorStand(initialLocation, damageDealt, textColor);
