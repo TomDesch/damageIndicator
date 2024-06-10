@@ -231,9 +231,9 @@ class TextUtilTest {
     }
 
     @Test
-    void repeatTextWithStyles_ZeroRepetitions_ExceptionThrown() {
+    void repeatTextWithStyles_NegativeRepetitions_ExceptionThrown() {
         TextComponent originalComponent = Component.text("Hello");
-        int times = 0;
+        int times = -1;
 
         assertThrows(IllegalArgumentException.class, () -> textUtil.repeatTextWithStyles(originalComponent, times));
     }
