@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
@@ -32,11 +33,17 @@ public class DamageIndicatorListener implements Listener {
      */
     @EventHandler
     public void removeStuckArmorStands(ChunkLoadEvent event) {
-        for (Entity possibleArmorStand : event.getChunk().getEntities()) {
-            if (Boolean.TRUE.equals(possibleArmorStand.getPersistentDataContainer().get(getCustomNamespacedKey(), PersistentDataType.BOOLEAN))) {
-                possibleArmorStand.remove();
-            }
+        Arrays.stream(event.getChunk().getEntities()).forEach(this::killIfCustom);
+    }
+
+    private void killIfCustom(Entity entity) {
+        if (hasCustomNSKTag(entity)) {
+            entity.remove();
         }
+    }
+
+    private boolean hasCustomNSKTag(Entity entity) {
+        return Boolean.TRUE.equals(entity.getPersistentDataContainer().get(getCustomNamespacedKey(), PersistentDataType.BOOLEAN));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

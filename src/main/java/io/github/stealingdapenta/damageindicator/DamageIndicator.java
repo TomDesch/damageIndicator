@@ -13,7 +13,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 
 public class DamageIndicator extends JavaPlugin {
-
     private static DamageIndicator instance = null;
 
     private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();

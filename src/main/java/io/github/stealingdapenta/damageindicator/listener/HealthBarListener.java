@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALWAYS_VISIBLE;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DEAD_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DISPLAY_DURATION;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_LENGTH;
@@ -32,6 +33,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 public class HealthBarListener implements Listener {
+
     private static final int TICKS_PER_SECOND = 20;
     private static final int MIN_SECONDS = 1;
     private static final int MAX_SECONDS = 10;
@@ -41,37 +43,57 @@ public class HealthBarListener implements Listener {
     private final TextUtil textUtil = TextUtil.getInstance();
     private final HolographUtil holographUtil = HolographUtil.getInstance();
 
+    private double calculateCurrentHealth(EntityDamageEvent event) {
+        return Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
+    }
+
+    private void displayHolographicHealthBar(LivingEntity livingEntity, Component name) {
+        // todo rewrite so it doesn't need to regenerate a new armor stand every time but can update the existing one
+        holographUtil.cancelHologramFor(livingEntity, entitiesWithActiveHologramBars);
+        LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, name);
+        entitiesWithActiveHologramBars.put(livingEntity, newTaskInfo);
+    }
+
+    private void displayCustomNameHealthBar(LivingEntity livingEntity, Component name) {
+        BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
+        if (Objects.nonNull(existingHealthBarTask)) {
+            if (!existingHealthBarTask.isCancelled()) {
+                existingHealthBarTask.cancel();
+            }
+            resetEntityName(livingEntity);
+            entitiesWithActiveHealthBars.remove(livingEntity);
+        }
+
+        BukkitTask resetOriginalNameAfterPresetTimeTask = null;
+        if (!HEALTH_BAR_ALWAYS_VISIBLE.getBooleanValue()) {
+            resetOriginalNameAfterPresetTimeTask = resetOriginalNameTask(livingEntity);
+        }
+
+        entitiesWithActiveHealthBars.put(livingEntity, resetOriginalNameAfterPresetTimeTask);
+
+        // Only restore the original name if it was visible before.
+        if (Objects.nonNull(livingEntity.customName())) {
+            originalEntityNames.put(livingEntity, livingEntity.customName());
+        }
+
+        livingEntity.customName(name);
+        livingEntity.setCustomNameVisible(true);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof LivingEntity livingEntity)) return;
+        if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
+            return;
+        }
 
-        double currentHealth = Math.max(0, ((LivingEntity) event.getEntity()).getHealth() - event.getFinalDamage());
+        double currentHealth = calculateCurrentHealth(event);
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
         Component name = createHealthBar(currentHealth, maxHealth);
 
         if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
-            holographUtil.cancelHologramFor(livingEntity, entitiesWithActiveHologramBars);
-            LivingEntityTaskInfo newTaskInfo = displayHologramBar(livingEntity, name);
-            entitiesWithActiveHologramBars.put(livingEntity, newTaskInfo);
-
+            displayHolographicHealthBar(livingEntity, name);
         } else {
-            BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(livingEntity);
-            if (Objects.nonNull(existingHealthBarTask)) {
-                if (!existingHealthBarTask.isCancelled()) {
-                    existingHealthBarTask.cancel();
-                }
-                resetEntityName(livingEntity);
-                entitiesWithActiveHealthBars.remove(livingEntity);
-            }
-
-            BukkitTask displayBarTask = displayNameBar(livingEntity);
-            entitiesWithActiveHealthBars.put(livingEntity, displayBarTask);
-
-            Component originalName = Objects.nonNull(livingEntity.customName()) ? livingEntity.customName() : livingEntity.name();
-            originalEntityNames.put(livingEntity, originalName);
-
-            livingEntity.customName(name);
-            livingEntity.setCustomNameVisible(true);
+            displayCustomNameHealthBar(livingEntity, name);
         }
     }
 
@@ -80,8 +102,9 @@ public class HealthBarListener implements Listener {
         if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
             return;
         }
-        if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer))
+        if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer)) {
             return;
+        }
 
         BukkitTask existingHealthBarTask = entitiesWithActiveHealthBars.get(killer);
         if (Objects.nonNull(existingHealthBarTask) && !existingHealthBarTask.isCancelled()) {
@@ -126,9 +149,8 @@ public class HealthBarListener implements Listener {
             public synchronized void cancel() throws IllegalStateException {
                 if (armorStand.isValid()) {
                     armorStand.remove();
-                } else {
-                    DamageIndicator.getInstance().getLogger().warning("Cancelling task, but invalid armor stand");
                 }
+
                 entitiesWithActiveHologramBars.remove(livingEntity);
                 super.cancel();
             }
@@ -151,7 +173,7 @@ public class HealthBarListener implements Listener {
         return new LivingEntityTaskInfo(task, armorStand);
     }
 
-    private BukkitTask displayNameBar(LivingEntity entity) {
+    private BukkitTask resetOriginalNameTask(LivingEntity entity) {
         return new BukkitRunnable() {
             @Override
             public synchronized void cancel() throws IllegalStateException {
@@ -190,9 +212,7 @@ public class HealthBarListener implements Listener {
         TextComponent aliveComponent = buildAliveComponent(aliveBarLength);
         TextComponent deadComponent = buildDeadComponent(deadBarLength);
 
-        return HEALTH_BAR_PREFIX.getFormattedStringValue()
-                                .append(aliveComponent.append(deadComponent))
-                                .append(HEALTH_BAR_SUFFIX.getFormattedStringValue());
+        return HEALTH_BAR_PREFIX.getFormattedStringValue().append(aliveComponent.append(deadComponent)).append(HEALTH_BAR_SUFFIX.getFormattedStringValue());
     }
 
     private TextComponent buildAliveComponent(int barLength) {
