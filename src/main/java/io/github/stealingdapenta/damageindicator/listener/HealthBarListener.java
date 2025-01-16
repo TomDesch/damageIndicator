@@ -87,7 +87,8 @@ public class HealthBarListener implements Listener {
         }
 
         double currentHealth = calculateCurrentHealth(event);
-        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.GENERIC_MAX_HEALTH)).getValue();
+        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
+                                  .getValue();
         Component name = createHealthBar(currentHealth, maxHealth);
 
         if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
