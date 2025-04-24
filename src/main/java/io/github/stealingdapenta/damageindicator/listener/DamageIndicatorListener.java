@@ -20,65 +20,83 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
-
+/**
+ * Listener responsible for displaying floating damage indicators above damaged entities, and cleaning up any "orphaned" ArmorStands on a chunk load.
+ */
 public class DamageIndicatorListener implements Listener {
+
     private static final String CUSTOM_NSK_TAG = "customnsktag";
 
     /**
-     * In case any armor stands get 'stuck'
-     * For example after a server crash, if any still alive
-     * we'll check all entities for our custom tag and remove if any match
-     *
-     * @param event whenever a chunk loads
+     * Returns the unique tag key used to identify plugin-controlled armor stands.
      */
-    @EventHandler
-    public void removeStuckArmorStands(ChunkLoadEvent event) {
-        Arrays.stream(event.getChunk().getEntities()).forEach(this::killIfCustom);
-    }
-
-    private void killIfCustom(Entity entity) {
-        if (hasCustomNSKTag(entity)) {
-            entity.remove();
-        }
-    }
-
-    private boolean hasCustomNSKTag(Entity entity) {
-        return Boolean.TRUE.equals(entity.getPersistentDataContainer().get(getCustomNamespacedKey(), PersistentDataType.BOOLEAN));
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void displayDamageIndicator(EntityDamageEvent event) {
-        Entity damagedEntity = event.getEntity();
-
-        if (!(damagedEntity instanceof LivingEntity livingDamagedEntity)) return;
-
-        Location initialLocation = this.getHitLocation(livingDamagedEntity);
-        double damageDealt = event.getFinalDamage();
-        TextColor textColor = this.calculateColor(event.getCause());
-        this.animateArmorStand(initialLocation, damageDealt, textColor);
-    }
-
     public static NamespacedKey getCustomNamespacedKey() {
         return new NamespacedKey(DamageIndicator.getInstance(), CUSTOM_NSK_TAG);
     }
 
-    private ArmorStand createArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
-        double hit = Math.round(damageDealt * 100.0) / 100.0;
-
-        return initialLocation.getWorld().spawn(initialLocation, ArmorStand.class, armorStand -> {
-            armorStand.customName(Component.text(hit, textColor));
-            armorStand.setCustomNameVisible(true);
-            armorStand.setVisible(false);
-            armorStand.setCollidable(false);
-            armorStand.setInvulnerable(true);
-            armorStand.setMarker(true);
-            armorStand.setGravity(true);
-            armorStand.setSmall(true);
-            armorStand.getPersistentDataContainer().set(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
-        });
+    /**
+     * On chunk load, removes any armor stands left over from animation tasks (e.g. after crashes) by checking for a plugin-specific tag.
+     */
+    @EventHandler
+    public void removeStuckArmorStands(ChunkLoadEvent event) {
+        Arrays.stream(event.getChunk()
+                           .getEntities())
+              .forEach(this::maybeRemoveArmorStandIfTagged);
     }
 
-    private TextColor calculateColor(EntityDamageEvent.DamageCause cause) {
+    private void maybeRemoveArmorStandIfTagged(Entity entity) {
+        if (hasCustomTag(entity)) {
+            entity.remove();
+        }
+    }
+
+    private boolean hasCustomTag(Entity entity) {
+        return Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                         .get(getCustomNamespacedKey(), PersistentDataType.BOOLEAN));
+    }
+
+    /**
+     * Displays a floating number above the damaged entity using an invisible ArmorStand.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void displayDamageIndicator(EntityDamageEvent event) {
+        Entity entity = event.getEntity();
+        if (!(entity instanceof LivingEntity livingEntity)) {
+            return;
+        }
+
+        double damageDealt = event.getFinalDamage();
+        TextColor textColor = resolveColorForCause(event.getCause());
+        Location location = getHitLocation(livingEntity);
+
+        animateArmorStand(location, damageDealt, textColor);
+    }
+
+    /**
+     * Spawns a small invisible armor stand at the given location and tags it.
+     */
+    private ArmorStand createArmorStand(Location location, double damage, TextColor color) {
+        double roundedDamage = Math.round(damage * 100.0) / 100.0;
+
+        return location.getWorld()
+                       .spawn(location, ArmorStand.class, armorStand -> {
+                           armorStand.customName(Component.text(roundedDamage, color));
+                           armorStand.setCustomNameVisible(true);
+                           armorStand.setVisible(false);
+                           armorStand.setMarker(true);
+                           armorStand.setGravity(true);
+                           armorStand.setCollidable(false);
+                           armorStand.setSmall(true);
+                           armorStand.setInvulnerable(true);
+                           armorStand.getPersistentDataContainer()
+                                     .set(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
+                       });
+    }
+
+    /**
+     * Resolves a text color based on the damage cause. Falls back to ConfigKeys.OTHER if unknown.
+     */
+    private TextColor resolveColorForCause(EntityDamageEvent.DamageCause cause) {
         try {
             return ConfigKeys.valueOf(cause.name())
                              .getTextColor();
@@ -87,41 +105,39 @@ public class DamageIndicatorListener implements Listener {
         }
     }
 
-    public void animateArmorStand(Location initialLocation, double damageDealt, TextColor textColor) {
-        ArmorStand armorStand = this.createArmorStand(initialLocation, damageDealt, textColor);
+    /**
+     * Animates a floating armor stand damage indicator that rises then disappears.
+     *
+     * @param location starting location
+     * @param damage   the amount of damage dealt
+     * @param color    the color of the displayed text
+     */
+    public void animateArmorStand(Location location, double damage, TextColor color) {
+        ArmorStand armorStand = createArmorStand(location, damage, color);
 
-        // Define initial velocity (upward motion)
-        double upwardSpeed = 0.15;
-        Vector velocity = new Vector(0, upwardSpeed, 0);
+        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), 0.15, (Math.random() * 0.1 - 0.05));
 
-        // Add randomness to velocity
-        double randomX = Math.random() * 0.1 - 0.05; // Random value between -0.05 and 0.05
-        double randomZ = Math.random() * 0.1 - 0.05; // Random value between -0.05 and 0.05
-        velocity.add(new Vector(randomX, 0, randomZ));
+        AtomicInteger steps = new AtomicInteger(30); // 30 ticks total
+        int intervalTicks = 0; // run every tick (change if performance needed)
 
-        // Simulate animation using Bukkit's scheduler
-        final AtomicInteger steps = new AtomicInteger(30); // Number of animation steps
-        int period = 0; // Delay between animation steps in server ticks (adjust as needed)
+        Bukkit.getScheduler()
+              .runTaskTimer(DamageIndicator.getInstance(), task -> {
+                  armorStand.teleport(armorStand.getLocation()
+                                                .add(velocity));
+                  velocity.subtract(new Vector(0, 0.01, 0)); // simulate gravity
 
-        Bukkit.getScheduler().runTaskTimer(DamageIndicator.getInstance(), task -> {
-            // Update ArmorStand position
-            armorStand.teleport(armorStand.getLocation().add(velocity));
-
-            // Apply gravity (decrease y-component)
-            velocity.subtract(new Vector(0, 0.01, 0));
-
-            int remainingSteps = steps.decrementAndGet();
-            if (remainingSteps <= 0) {
-                armorStand.remove();
-                task.cancel();
-            }
-        }, 0, period);
+                  if (steps.decrementAndGet() <= 0) {
+                      armorStand.remove();
+                      task.cancel();
+                  }
+              }, 0, intervalTicks);
     }
 
-    public Location getHitLocation(Entity targetEntity) {
-        Location targetLocation = targetEntity.getLocation();
-        double height = 1;
-        return targetLocation.add(0d, height, 0d);
+    /**
+     * Gets the location slightly above the entity's head where the indicator should start.
+     */
+    public Location getHitLocation(Entity entity) {
+        return entity.getLocation()
+                     .add(0d, 1d, 0d);
     }
 }
-
