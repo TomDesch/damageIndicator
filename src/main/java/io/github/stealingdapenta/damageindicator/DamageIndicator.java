@@ -8,19 +8,22 @@ import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.listener.CustomNameListener;
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
-import java.util.Objects;
 import org.bukkit.Bukkit;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
-
+/**
+ * Main entry point for the DamageIndicator plugin.
+ */
 public class DamageIndicator extends JavaPlugin {
-    private static DamageIndicator instance = null;
+
+    private static DamageIndicator instance;
 
     private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();
     private final HealthBarListener healthBarListener = new HealthBarListener();
+    private final CustomNameListener customNamesListener = new CustomNameListener();
     private final ReloadConfigCommand reloadConfigCommand = new ReloadConfigCommand();
     private final AreaRemoveCommand areaRemoveCommand = new AreaRemoveCommand();
-    private final CustomNameListener customNamesListener = new CustomNameListener();
 
     public static DamageIndicator getInstance() {
         return instance;
@@ -29,68 +32,58 @@ public class DamageIndicator extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
-
         CONFIGURATION_FILE_MANAGER.loadConfig();
 
-        Objects.requireNonNull(this.getCommand("reload"))
-               .setExecutor(reloadConfigCommand);
-        Objects.requireNonNull(this.getCommand("arearemove"))
-               .setExecutor(areaRemoveCommand);
+        registerCommand("reload", reloadConfigCommand);
+        registerCommand("arearemove", areaRemoveCommand);
 
-        enableDamageIndicator();
-        enableHealthBar();
-        enableHolographicCustomNames();
+        if (ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
+            registerFeature(damageIndicatorListener, "Damage indicator");
+        } else {
+            logDisabled("Damage indicator");
+        }
 
-        pluginEnabledLog();
+        if (ConfigKeys.ENABLE_HEALTH_BAR.asBoolean()) {
+            registerFeature(healthBarListener, "Health bar");
+        } else {
+            logDisabled("Health bar");
+        }
+
+        if (ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean()) {
+            if (ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+                registerFeature(customNamesListener, "Holographic custom names");
+            } else {
+                getLogger().warning("Holographic custom names enabled, but holographic health bar is disabled. Enable both for expected behavior.");
+            }
+        } else {
+            logDisabled("Holographic custom names");
+        }
+
+        getLogger().info("Damage Indicator plugin enabled.");
     }
-
 
     @Override
     public void onDisable() {
         instance = null;
-        pluginDisabledLog();
+        getLogger().info("Damage Indicator plugin disabled.");
     }
 
-    private void enableDamageIndicator() {
-        if (ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
-            Bukkit.getPluginManager()
-                  .registerEvents(damageIndicatorListener, getInstance());
-            getLogger().info("Damage indicator feature enabled. To disable, modify the config.yml.");
-        } else {
-            getLogger().info("Damage indicator feature not enabled. To enable, modify the config.yml.");
+    private void registerCommand(String commandName, Object executor) {
+        PluginCommand command = getCommand(commandName);
+        if (command == null) {
+            getLogger().warning("Command '" + commandName + "' not found in plugin.yml");
+            return;
         }
+        command.setExecutor((org.bukkit.command.CommandExecutor) executor);
     }
 
-    private void enableHealthBar() {
-        if (ConfigKeys.ENABLE_HEALTH_BAR.asBoolean()) {
-            Bukkit.getPluginManager()
-                  .registerEvents(healthBarListener, getInstance());
-            getLogger().info("Health bar feature enabled. To disable, modify the config.yml.");
-        } else {
-            getLogger().info("Health bar feature not enabled. To enable, modify the config.yml.");
-        }
+    private void registerFeature(Object listener, String featureName) {
+        Bukkit.getPluginManager()
+              .registerEvents((org.bukkit.event.Listener) listener, this);
+        getLogger().info(featureName + " feature enabled.");
     }
 
-    private void enableHolographicCustomNames() {
-        if (ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean()) {
-            if (ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-                Bukkit.getPluginManager()
-                      .registerEvents(customNamesListener, getInstance());
-                getLogger().info("Holographic custom names feature enabled. To disable, modify the config.yml.");
-            } else {
-                getLogger().warning("Holographic custom names feature is enabled in your config, but Holographic Health bars is disabled.");
-                getLogger().warning("If you want to use holographic custom names, then the holographic health bars feature should also be enabled.");
-            }
-        } else {
-            getLogger().info("Holographic custom names feature not enabled. To enable, modify the config.yml.");
-        }
-    }
-
-    private void pluginEnabledLog() {
-        getLogger().info("Damage indicator plugin enabled.");
-    }
-
-    private void pluginDisabledLog() {
-        getLogger().info("Damage indicator is now disabled.");
+    private void logDisabled(String featureName) {
+        getLogger().info(featureName + " feature not enabled. You can enable it in config.yml.");
     }
 }
