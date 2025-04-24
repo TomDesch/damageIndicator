@@ -65,7 +65,7 @@ public class HealthBarListener implements Listener {
         }
 
         BukkitTask resetOriginalNameAfterPresetTimeTask = null;
-        if (!HEALTH_BAR_ALWAYS_VISIBLE.getBooleanValue()) {
+        if (!HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
             resetOriginalNameAfterPresetTimeTask = resetOriginalNameTask(livingEntity);
         }
 
@@ -91,7 +91,7 @@ public class HealthBarListener implements Listener {
                                   .getValue();
         Component name = createHealthBar(currentHealth, maxHealth);
 
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
             displayHolographicHealthBar(livingEntity, name);
         } else {
             displayCustomNameHealthBar(livingEntity, name);
@@ -100,7 +100,7 @@ public class HealthBarListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
             return;
         }
         if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer)) {
@@ -117,7 +117,7 @@ public class HealthBarListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void handleDeathEvents(EntityDeathEvent event) {
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
             removeHologramsUponDeath(event);
         } else {
             restoreNameUponDeath(event);
@@ -140,8 +140,7 @@ public class HealthBarListener implements Listener {
     }
 
     private LivingEntityTaskInfo displayHologramBar(LivingEntity livingEntity, Component name) {
-        final ArmorStand armorStand = holographUtil.createArmorStandHologram(
-                holographUtil.locationAboveEntity(livingEntity, HOLOGRAM_POSITION.getDoubleValue()), name);
+        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(livingEntity, HOLOGRAM_POSITION.asDouble()), name);
 
         BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
@@ -164,12 +163,12 @@ public class HealthBarListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, HOLOGRAM_POSITION.getDoubleValue()));
+                    armorStand.teleport(holographUtil.locationAboveEntity(livingEntity, HOLOGRAM_POSITION.asDouble()));
                 }
 
                 ticks++;
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.getIntValue());
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.asInt());
 
         return new LivingEntityTaskInfo(task, armorStand);
     }
@@ -197,12 +196,12 @@ public class HealthBarListener implements Listener {
     }
 
     private int getDisplayDurationInTicks() {
-        int displayDuration = HEALTH_BAR_DISPLAY_DURATION.getIntValue();
+        int displayDuration = HEALTH_BAR_DISPLAY_DURATION.asInt();
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(displayDuration, MAX_SECONDS));
     }
 
     private Component createHealthBar(double currentHealth, double maxHealth) {
-        int healthBarLength = HEALTH_BAR_LENGTH.getIntValue();
+        int healthBarLength = HEALTH_BAR_LENGTH.asInt();
         double percentDead = 1 - (currentHealth / maxHealth);
         int deadBarLength = Math.max(0, (int) Math.round(percentDead * healthBarLength));
         if (deadBarLength >= healthBarLength) {
@@ -213,14 +212,16 @@ public class HealthBarListener implements Listener {
         TextComponent aliveComponent = buildAliveComponent(aliveBarLength);
         TextComponent deadComponent = buildDeadComponent(deadBarLength);
 
-        return HEALTH_BAR_PREFIX.getFormattedStringValue().append(aliveComponent.append(deadComponent)).append(HEALTH_BAR_SUFFIX.getFormattedStringValue());
+        return HEALTH_BAR_PREFIX.asFormattedString()
+                                .append(aliveComponent.append(deadComponent))
+                                .append(HEALTH_BAR_SUFFIX.asFormattedString());
     }
 
     private TextComponent buildAliveComponent(int barLength) {
-        return textUtil.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.getFormattedStringValue(), barLength);
+        return textUtil.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), barLength);
     }
 
     private TextComponent buildDeadComponent(int barLength) {
-        return textUtil.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.getFormattedStringValue(), barLength);
+        return textUtil.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), barLength);
     }
 }

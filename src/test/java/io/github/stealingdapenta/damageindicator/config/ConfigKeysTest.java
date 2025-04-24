@@ -1,5 +1,7 @@
 package io.github.stealingdapenta.damageindicator.config;
 
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_DAMAGE_INDICATOR;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,7 +23,6 @@ import org.mockito.MockedStatic;
 class ConfigKeysTest {
 
     private DamageIndicator mockPlugin;
-
     private FileConfiguration mockConfig;
 
     @BeforeEach
@@ -34,124 +35,116 @@ class ConfigKeysTest {
     }
 
     @Test
-    void getBooleanValue_true_returnsTrue() {
+    void asBoolean_true_returnsTrue() {
         when(mockConfig.getString(anyString())).thenReturn("true");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            boolean result = ConfigKeys.ENABLE_DAMAGE_INDICATOR.getBooleanValue();
-            assertTrue(result);
+            assertTrue(ENABLE_DAMAGE_INDICATOR.asBoolean());
         }
     }
 
     @Test
-    void getBooleanValue_false_returnsFalse() {
+    void asBoolean_false_returnsFalse() {
         when(mockConfig.getString(anyString())).thenReturn("false");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            boolean result = ConfigKeys.ENABLE_DAMAGE_INDICATOR.getBooleanValue();
-            assertFalse(result);
+            assertFalse(ENABLE_DAMAGE_INDICATOR.asBoolean());
         }
     }
 
     @Test
-    void getStringValue_value_returnsAsString() {
-        String value = "123465";
-        when(mockConfig.getString(anyString())).thenReturn(value);
+    void asString_returnsConfigValue() {
+        String expected = "123465";
+        when(mockConfig.getString(anyString())).thenReturn(expected);
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            String result = ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL.getStringValue();
-            assertEquals(value, result);
+            String result = ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL.asString();
+            assertEquals(expected, result);
         }
     }
 
     @Test
-    void getDoubleValue_null_returns0() {
+    void asDouble_null_returns0() {
         when(mockConfig.getString(anyString())).thenReturn(null);
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            double result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
-            assertEquals(0, result);
+            double result = HOLOGRAM_FOLLOW_SPEED.asDouble();
+            assertEquals(Double.parseDouble(HOLOGRAM_FOLLOW_SPEED.getDefaultValue()), result);
         }
     }
 
     @Test
-    void getDoubleValue_value_returnsAsDouble() {
-        double value = 12345D;
-        when(mockConfig.getString(anyString())).thenReturn(String.valueOf(value));
+    void asDouble_validString_returnsParsedDouble() {
+        double expected = 12345D;
+        when(mockConfig.getString(anyString())).thenReturn(String.valueOf(expected));
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            double result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
-            assertEquals(value, result);
+            double result = HOLOGRAM_FOLLOW_SPEED.asDouble();
+            assertEquals(expected, result);
         }
     }
 
     @Test
-    void getDoubleValue_notADouble_handleParseError() {
+    void asDouble_invalidString_logsWarningAndReturns0() {
         when(mockConfig.getString(anyString())).thenReturn("not a double");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            double result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getDoubleValue();
-            assertEquals(0, result);
-            verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for hologram_follow_speed.");
+            double result = HOLOGRAM_FOLLOW_SPEED.asDouble();
+            assertEquals(0.0, result);
+            verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for " + HOLOGRAM_FOLLOW_SPEED.name()
+                                                                                                                                      .toLowerCase() + ".");
         }
     }
 
     @Test
-    void getIntValue_value_returnsAsInt() {
-        int value = 1234;
-        when(mockConfig.getString(anyString())).thenReturn(String.valueOf(value));
+    void asInt_validString_returnsParsedInt() {
+        int expected = 1234;
+        when(mockConfig.getString(anyString())).thenReturn(String.valueOf(expected));
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            int result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getIntValue();
-            assertEquals(value, result);
+            int result = HOLOGRAM_FOLLOW_SPEED.asInt();
+            assertEquals(expected, result);
         }
     }
 
     @Test
-    void getIntValue_null_returns0() {
+    void asInt_null_returnsParsedDefaultValue() {
         when(mockConfig.getString(anyString())).thenReturn(null);
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            int result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getIntValue();
-            assertEquals(0, result);
+            int expected = Integer.parseInt(HOLOGRAM_FOLLOW_SPEED.getDefaultValue());
+            int result = HOLOGRAM_FOLLOW_SPEED.asInt();
+            assertEquals(expected, result);
         }
     }
 
     @Test
-    void getIntValue_notAnInt_handlesParseError() {
+    void asInt_invalidString_logsWarningAndReturns0() {
         when(mockConfig.getString(anyString())).thenReturn("not an integer");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
-            int result = ConfigKeys.HOLOGRAM_FOLLOW_SPEED.getIntValue();
+            int result = HOLOGRAM_FOLLOW_SPEED.asInt();
             assertEquals(0, result);
-            verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for hologram_follow_speed.");
+            verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for " + HOLOGRAM_FOLLOW_SPEED.name()
+                                                                                                                                      .toLowerCase() + ".");
         }
     }
 
@@ -162,10 +155,8 @@ class ConfigKeysTest {
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
-
             TextColor result = ConfigKeys.MAGIC.getTextColor();
             assertEquals(TextColor.color(123, 123, 123), result);
         }
     }
-
 }

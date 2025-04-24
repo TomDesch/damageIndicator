@@ -2,12 +2,12 @@ package io.github.stealingdapenta.damageindicator.config;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.TextUtil;
-import java.util.Objects;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public enum ConfigKeys {
+
     ENABLE_DAMAGE_INDICATOR("true"),
     MAGIC("&(95,10,95)"),
     POISON("&(0,100,20)"),
@@ -39,7 +39,7 @@ public enum ConfigKeys {
     FLY_INTO_WALL("&(128,128,128)"),
     HOT_FLOOR("&(200,90,25)"),
     CRAMMING("&(0,128,0)"),
-    DRYOUT("&(244,164,96)"),
+    DRY_OUT("&(244,164,96)"),
     FREEZE("&(173,216,230)"),
     SONIC_BOOM("&(255,215,0)"),
     OTHER("&(130,130,30)"),
@@ -59,7 +59,6 @@ public enum ConfigKeys {
 
     private final String defaultValue;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
-
     private static final TextUtil textUtil = TextUtil.getInstance();
 
     ConfigKeys(String defaultValue) {
@@ -70,76 +69,48 @@ public enum ConfigKeys {
         return defaultValue;
     }
 
-
-    public boolean getBooleanValue() {
-        return getBooleanValue(name().toLowerCase());
+    public String asString() {
+        String value = getPlugin().getConfig()
+                                  .getString(name().toLowerCase());
+        return (value != null) ? value : defaultValue;
     }
 
-    public boolean getBooleanValue(String key) {
-        JavaPlugin plugin = DamageIndicator.getInstance();
-        String valueAsString = plugin.getConfig()
-                                     .getString(key);
-
-        return Boolean.parseBoolean(valueAsString);
+    public boolean asBoolean() {
+        return Boolean.parseBoolean(asString());
     }
 
-    public String getStringValue() {
-        return DamageIndicator.getInstance()
-                              .getConfig()
-                              .getString(name().toLowerCase());
-    }
-
-    public TextComponent getFormattedStringValue() {
-        return textUtil.parseFormattedString(getStringValue());
-    }
-
-    public double getDoubleValue() {
-        return getDoubleValue(name().toLowerCase());
-    }
-
-    private double getDoubleValue(String key) {
-        JavaPlugin plugin = DamageIndicator.getInstance();
-        String valueAsString = plugin.getConfig()
-                                     .getString(key);
-        double result;
-        if (Objects.isNull(valueAsString)) {
-            valueAsString = "0";
-        }
+    public int asInt() {
         try {
-            result = Double.parseDouble(valueAsString);
-        } catch (NumberFormatException numberFormatException) {
-            DamageIndicator.getInstance()
-                           .getLogger()
-                           .warning(PARSING_ERROR.formatted(key));
-            result = 0;
+            return Integer.parseInt(asString());
+        } catch (NumberFormatException ex) {
+            logParseWarning(name().toLowerCase());
+            return 0;
         }
-        return result;
     }
 
-    public int getIntValue() {
-        return getIntValue(name().toLowerCase());
-    }
-
-    private int getIntValue(String key) {
-        JavaPlugin plugin = DamageIndicator.getInstance();
-        String valueAsString = plugin.getConfig()
-                                     .getString(key);
-        int result;
-        if (Objects.isNull(valueAsString)) {
-            valueAsString = "0";
-        }
+    public double asDouble() {
         try {
-            result = Integer.parseInt(valueAsString);
-        } catch (NumberFormatException numberFormatException) {
-            DamageIndicator.getInstance()
-                           .getLogger()
-                           .warning(PARSING_ERROR.formatted(key));
-            result = 0;
+            return Double.parseDouble(asString());
+        } catch (NumberFormatException ex) {
+            logParseWarning(name().toLowerCase());
+            return 0.0;
         }
-        return result;
     }
 
     public TextColor getTextColor() {
-        return textUtil.parseRGB(getStringValue());
+        return textUtil.parseRGB(asString());
+    }
+
+    public TextComponent asFormattedString() {
+        return textUtil.parseFormattedString(asString());
+    }
+
+    private void logParseWarning(String key) {
+        getPlugin().getLogger()
+                   .warning(PARSING_ERROR.formatted(key));
+    }
+
+    private JavaPlugin getPlugin() {
+        return DamageIndicator.getInstance();
     }
 }

@@ -52,7 +52,7 @@ public class DamageIndicator extends JavaPlugin {
     }
 
     private void enableDamageIndicator() {
-        if (ConfigKeys.ENABLE_DAMAGE_INDICATOR.getBooleanValue()) {
+        if (ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
             Bukkit.getPluginManager()
                   .registerEvents(damageIndicatorListener, getInstance());
             getLogger().info("Damage indicator feature enabled. To disable, modify the config.yml.");
@@ -62,7 +62,7 @@ public class DamageIndicator extends JavaPlugin {
     }
 
     private void enableHealthBar() {
-        if (ConfigKeys.ENABLE_HEALTH_BAR.getBooleanValue()) {
+        if (ConfigKeys.ENABLE_HEALTH_BAR.asBoolean()) {
             Bukkit.getPluginManager()
                   .registerEvents(healthBarListener, getInstance());
             getLogger().info("Health bar feature enabled. To disable, modify the config.yml.");
@@ -72,8 +72,8 @@ public class DamageIndicator extends JavaPlugin {
     }
 
     private void enableHolographicCustomNames() {
-        if (ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.getBooleanValue()) {
-            if (ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.getBooleanValue()) {
+        if (ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean()) {
+            if (ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
                 Bukkit.getPluginManager()
                       .registerEvents(customNamesListener, getInstance());
                 getLogger().info("Holographic custom names feature enabled. To disable, modify the config.yml.");
