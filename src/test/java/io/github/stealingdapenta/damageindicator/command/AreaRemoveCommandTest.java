@@ -1,20 +1,19 @@
 package io.github.stealingdapenta.damageindicator.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import java.util.Arrays;
 import java.util.List;
+import net.kyori.adventure.text.Component;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
-
 
 class AreaRemoveCommandTest {
 
@@ -38,44 +36,37 @@ class AreaRemoveCommandTest {
     @BeforeEach
     void setUp() {
         areaRemoveCommand = new AreaRemoveCommand();
-
         mockCommandSender = mock(CommandSender.class);
         mockCommand = mock(Command.class);
         mockPlayer = mock(Player.class);
-
         when(mockPlayer.hasPermission(anyString())).thenReturn(true);
     }
 
     @Test
-    void onCommand_withoutPlayer_returnsFalse() {
+    void onCommand_withoutPlayer_returnsTrue() {
         boolean result = areaRemoveCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
-
-        assertFalse(result);
+        assertTrue(result);
     }
 
     @Test
     void onCommand_withoutPermission_returnsTrueWithMessage() {
         when(mockPlayer.hasPermission(anyString())).thenReturn(false);
 
-        String message = "You don't have the required damageindicator.arearemove to execute this command.";
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
 
         boolean result = areaRemoveCommand.onCommand(mockPlayer, mockCommand, LABEL, new String[]{});
 
         assertTrue(result);
-        verify(mockPlayer, times(1)).sendMessage(captor.capture());
-        assertEquals(message, captor.getValue());
+        verify(mockPlayer).sendMessage(captor.capture());
+        assertEquals(Component.text("You don't have the required damageindicator.arearemove to execute this command."), captor.getValue());
     }
 
     @Test
     void onCommand_with2Enemies_successWithMessage() {
-        String message = "Successfully removed 2 nearby entities.";
-
         Entity mockEntity1 = mock(Entity.class);
         Entity mockEntity2 = mock(Entity.class);
 
         List<Entity> nearbyEntities = Arrays.asList(mockEntity1, mockEntity2);
-
         when(mockPlayer.getNearbyEntities(50, 50, 50)).thenReturn(nearbyEntities);
 
         PersistentDataContainer mockDataContainer1 = mock(PersistentDataContainer.class);
@@ -87,10 +78,9 @@ class AreaRemoveCommandTest {
         when(mockDataContainer1.getOrDefault(any(), any(), anyBoolean())).thenReturn(true);
         when(mockDataContainer2.getOrDefault(any(), any(), anyBoolean())).thenReturn(true);
 
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
 
         try (MockedStatic<DamageIndicatorListener> mockedStatic = mockStatic(DamageIndicatorListener.class)) {
-
             mockedStatic.when(DamageIndicatorListener::getCustomNamespacedKey)
                         .thenReturn(mock(NamespacedKey.class));
 
@@ -98,13 +88,13 @@ class AreaRemoveCommandTest {
             assertTrue(result);
         }
 
-        verify(mockPlayer, times(1)).getNearbyEntities(50, 50, 50);
-        verify(mockEntity1, times(1)).getPersistentDataContainer();
-        verify(mockEntity2, times(1)).getPersistentDataContainer();
-        verify(mockEntity1, times(1)).remove();
-        verify(mockEntity2, times(1)).remove();
-        verify(mockPlayer, times(1)).sendMessage(captor.capture());
+        verify(mockPlayer).getNearbyEntities(50, 50, 50);
+        verify(mockEntity1).getPersistentDataContainer();
+        verify(mockEntity2).getPersistentDataContainer();
+        verify(mockEntity1).remove();
+        verify(mockEntity2).remove();
+        verify(mockPlayer).sendMessage(captor.capture());
 
-        assertEquals(message, captor.getValue());
+        assertEquals(Component.text("Successfully removed 2 nearby entities."), captor.getValue());
     }
 }

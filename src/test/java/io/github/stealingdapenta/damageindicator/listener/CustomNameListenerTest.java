@@ -60,7 +60,7 @@ class CustomNameListenerTest {
         when(livingEntity.isCustomNameVisible()).thenReturn(true);
         when(livingEntity.customName()).thenReturn(null);
 
-        customNameListener.replaceCustomName(spawnEvent);
+        customNameListener.onEntitySpawn(spawnEvent);
 
         verify(mockHolographUtil, never()).createArmorStandHologram(any(), any());
         verify(livingEntity, never()).setCustomNameVisible(false);
@@ -72,7 +72,7 @@ class CustomNameListenerTest {
         Entity entity = mock(Entity.class);
         when(spawnEvent.getEntity()).thenReturn(entity);
 
-        customNameListener.replaceCustomName(spawnEvent);
+        customNameListener.onEntitySpawn(spawnEvent);
 
         verify(mockHolographUtil, never()).createArmorStandHologram(any(), any());
     }
@@ -86,7 +86,7 @@ class CustomNameListenerTest {
         Entity entity = mock(Entity.class);
         when(chunk.getEntities()).thenReturn(new Entity[]{entity});
 
-        customNameListener.replaceCustomName(chunkLoadEvent);
+        customNameListener.onChunkLoad(chunkLoadEvent);
 
         verify(mockHolographUtil, never()).createArmorStandHologram(any(), any());
     }
@@ -98,7 +98,7 @@ class CustomNameListenerTest {
 
         when(entityDeathEvent.getEntity()).thenReturn(livingEntity);
 
-        customNameListener.removeHolographicCustomNames(entityDeathEvent);
+        customNameListener.onEntityDeath(entityDeathEvent);
 
         verify(mockHolographUtil).cancelHologramFor(eq(livingEntity), any());
     }
