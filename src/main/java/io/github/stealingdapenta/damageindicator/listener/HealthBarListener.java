@@ -10,9 +10,9 @@ import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_SUFFIX;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_POSITION;
+import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.HashMap;
@@ -46,7 +46,6 @@ public class HealthBarListener implements Listener {
     private final Map<LivingEntity, Component> originalEntityNames = new HashMap<>();
 
     private final TextUtil textUtil = TextUtil.getInstance();
-    private final HolographUtil holographUtil = HolographUtil.getInstance();
 
     /**
      * Displays the health bar after an entity takes damage.
@@ -104,7 +103,7 @@ public class HealthBarListener implements Listener {
     }
 
     private void displayHolographicHealthBar(LivingEntity entity, Component name) {
-        holographUtil.cancelHologramFor(entity, entitiesWithActiveHologramBars);
+        HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars);
         LivingEntityTaskInfo taskInfo = spawnHologramBar(entity, name);
         entitiesWithActiveHologramBars.put(entity, taskInfo);
     }
@@ -138,7 +137,7 @@ public class HealthBarListener implements Listener {
     }
 
     private void removeHologramsUponDeath(EntityDeathEvent event) {
-        holographUtil.cancelHologramFor(event.getEntity(), entitiesWithActiveHologramBars);
+        HOLOGRAPH_UTIL.cancelHologramFor(event.getEntity(), entitiesWithActiveHologramBars);
     }
 
     private BukkitTask scheduleNameReset(LivingEntity entity) {
@@ -163,7 +162,7 @@ public class HealthBarListener implements Listener {
     }
 
     private LivingEntityTaskInfo spawnHologramBar(LivingEntity entity, Component name) {
-        ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), name);
+        ArmorStand armorStand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), name);
 
         BukkitTask task = new BukkitRunnable() {
             int ticks = 0;
@@ -175,7 +174,7 @@ public class HealthBarListener implements Listener {
                     return;
                 }
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()));
+                    armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()));
                 }
             }
 

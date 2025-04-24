@@ -2,9 +2,9 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_NAME_POSITION;
+import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,7 +27,6 @@ import org.bukkit.scheduler.BukkitTask;
 public class CustomNameListener implements Listener {
 
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHolographicCustomNames = new HashMap<>();
-    private final HolographUtil holographUtil = HolographUtil.getInstance();
 
     /**
      * Handles entity spawn events. If the entity has a visible custom name, it's replaced with a floating ArmorStand hologram.
@@ -56,7 +55,7 @@ public class CustomNameListener implements Listener {
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onEntityDeath(EntityDeathEvent event) {
-        holographUtil.cancelHologramFor(event.getEntity(), entitiesWithActiveHolographicCustomNames);
+        HOLOGRAPH_UTIL.cancelHologramFor(event.getEntity(), entitiesWithActiveHolographicCustomNames);
     }
 
     /**
@@ -88,7 +87,7 @@ public class CustomNameListener implements Listener {
      * @return task info for the created hologram
      */
     private LivingEntityTaskInfo spawnHologram(LivingEntity entity, Component name) {
-        final ArmorStand armorStand = holographUtil.createArmorStandHologram(holographUtil.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()), name);
+        final ArmorStand armorStand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()), name);
 
         BukkitTask followTask = new BukkitRunnable() {
 
@@ -114,7 +113,7 @@ public class CustomNameListener implements Listener {
                 }
 
                 if (armorStand.isValid()) {
-                    armorStand.teleport(holographUtil.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()));
+                    armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()));
                 }
             }
         }.runTaskTimer(DamageIndicator.getInstance(), 2, HOLOGRAM_FOLLOW_SPEED.asInt());

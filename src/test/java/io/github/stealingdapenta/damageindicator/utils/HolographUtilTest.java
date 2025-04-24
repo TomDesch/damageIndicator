@@ -1,5 +1,6 @@
 package io.github.stealingdapenta.damageindicator.utils;
 
+import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -16,17 +17,9 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class HolographUtilTest {
-
-    private HolographUtil holographUtil;
-
-    @BeforeEach
-    void setUp() {
-        holographUtil = HolographUtil.getInstance();
-    }
 
     @Test
     void locationAboveEntity_entity_returnsLocation() {
@@ -34,7 +27,7 @@ class HolographUtilTest {
         when(livingEntity.getLocation()).thenReturn(new Location(null, 0, 0, 0));
         when(livingEntity.getHeight()).thenReturn(1.0);
 
-        Location resultLocation = holographUtil.locationAboveEntity(livingEntity, 2.0);
+        Location resultLocation = HOLOGRAPH_UTIL.locationAboveEntity(livingEntity, 2.0);
 
         assertNotNull(resultLocation);
         assertEquals(0, resultLocation.getX());
@@ -54,7 +47,7 @@ class HolographUtilTest {
         when(taskInfo.getArmorStand()
                      .isValid()).thenReturn(true);
 
-        holographUtil.cancelHologramFor(livingEntity, data);
+        HOLOGRAPH_UTIL.cancelHologramFor(livingEntity, data);
 
         assertTrue(taskStub.isCancelled());
         verify(armorStand).remove();
