@@ -1,5 +1,6 @@
 package io.github.stealingdapenta.damageindicator.config;
 
+import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -23,12 +24,9 @@ class ConfigurationFileManagerTest {
 
     private FileConfiguration mockConfig;
 
-    private ConfigurationFileManager configFileManager;
 
     @BeforeEach
     void setUp() {
-        configFileManager = ConfigurationFileManager.getInstance();
-
         mockPlugin = mock(DamageIndicator.class);
         mockConfig = mock(FileConfiguration.class);
 
@@ -48,7 +46,7 @@ class ConfigurationFileManagerTest {
             FileConfigurationOptions optionsStub = mock(FileConfigurationOptions.class);
             when(mockConfig.options()).thenReturn(optionsStub);
 
-            configFileManager.loadConfig();
+            CONFIGURATION_FILE_MANAGER.loadConfig();
 
             verify(mockPlugin, times(1)).saveDefaultConfig();
             verify(mockConfig, times(ConfigKeys.values().length)).addDefault(anyString(), any());
@@ -68,7 +66,7 @@ class ConfigurationFileManagerTest {
             FileConfigurationOptions optionsStub = mock(FileConfigurationOptions.class);
             when(mockConfig.options()).thenReturn(optionsStub);
 
-            configFileManager.loadConfig();
+            CONFIGURATION_FILE_MANAGER.loadConfig();
 
             for (ConfigKeys defaultConfig : ConfigKeys.values()) {
                 verify(mockConfig, times(1)).addDefault(defaultConfig.name()
@@ -89,7 +87,7 @@ class ConfigurationFileManagerTest {
             FileConfigurationOptions optionsStub = mock(FileConfigurationOptions.class);
             when(mockConfig.options()).thenReturn(optionsStub);
 
-            configFileManager.loadConfig();
+            CONFIGURATION_FILE_MANAGER.loadConfig();
 
             verify(mockConfig.options(), times(1)).copyDefaults(true);
             verify(mockPlugin, times(1)).saveConfig();
@@ -102,7 +100,7 @@ class ConfigurationFileManagerTest {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
 
-            configFileManager.reloadConfig();
+            CONFIGURATION_FILE_MANAGER.reloadConfig();
             verify(mockPlugin, times(1)).reloadConfig();
         }
     }

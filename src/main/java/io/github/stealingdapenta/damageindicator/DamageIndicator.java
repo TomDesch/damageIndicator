@@ -1,9 +1,10 @@
 package io.github.stealingdapenta.damageindicator;
 
+import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
+
 import io.github.stealingdapenta.damageindicator.command.AreaRemoveCommand;
 import io.github.stealingdapenta.damageindicator.command.ReloadConfigCommand;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
-import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
 import io.github.stealingdapenta.damageindicator.listener.CustomNameListener;
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
@@ -29,8 +30,7 @@ public class DamageIndicator extends JavaPlugin {
     public void onEnable() {
         instance = this;
 
-        ConfigurationFileManager.getInstance()
-                                .loadConfig();
+        CONFIGURATION_FILE_MANAGER.loadConfig();
 
         Objects.requireNonNull(this.getCommand("reload"))
                .setExecutor(reloadConfigCommand);

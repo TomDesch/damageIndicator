@@ -1,6 +1,7 @@
 package io.github.stealingdapenta.damageindicator.command;
 
-import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
+import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
+
 import io.github.stealingdapenta.damageindicator.config.Permission;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -20,8 +21,7 @@ public class ReloadConfigCommand implements CommandExecutor {
             return true;
         }
 
-        ConfigurationFileManager.getInstance()
-                                .reloadConfig();
+        CONFIGURATION_FILE_MANAGER.reloadConfig();
         sender.sendMessage(Component.text(RELOADED_MSG));
         return true;
     }

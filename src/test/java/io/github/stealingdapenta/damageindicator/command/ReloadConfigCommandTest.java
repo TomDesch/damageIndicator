@@ -3,14 +3,14 @@ package io.github.stealingdapenta.damageindicator.command;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager;
+import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,38 +36,37 @@ class ReloadConfigCommandTest {
     @Test
     void onCommand_withoutPermission_returnsTrueWithMessage() {
         when(mockCommandSender.hasPermission(anyString())).thenReturn(false);
-        String message = "You don't have the required damageindicator.reload to execute this command.";
+        String expectedMessage = "You don't have the required damageindicator.reload to execute this command.";
 
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
 
         boolean result = reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
 
         assertTrue(result);
         verify(mockCommandSender, times(1)).sendMessage(captor.capture());
-        assertEquals(message, captor.getValue());
+        assertEquals(Component.text(expectedMessage), captor.getValue());
     }
+
 
     @Test
     void onCommand_withPermission_successWithMessage() {
-        String message = "Successfully reloaded the DamageIndicator configuration file.";
+        String expectedMessage = "Successfully reloaded the DamageIndicator configuration file.";
+
         when(mockCommandSender.hasPermission(anyString())).thenReturn(true);
-        ConfigurationFileManager mockConfigFM = mock(ConfigurationFileManager.class);
 
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-
-        try (MockedStatic<ConfigurationFileManager> mockedStatic = mockStatic(ConfigurationFileManager.class)) {
-
-            mockedStatic.when(ConfigurationFileManager::getInstance)
-                        .thenReturn(mockConfigFM);
-
-            doNothing().when(mockConfigFM)
-                       .reloadConfig();
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            DamageIndicator mockPlugin = mock(DamageIndicator.class);
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
 
             boolean result = reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
-            assertTrue(result);
-        }
 
-        verify(mockCommandSender, times(1)).sendMessage(captor.capture());
-        assertEquals(message, captor.getValue());
+            assertTrue(result);
+
+            ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+            verify(mockCommandSender, times(1)).sendMessage(captor.capture());
+            assertEquals(Component.text(expectedMessage), captor.getValue());
+        }
     }
+
 }

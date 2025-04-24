@@ -1,43 +1,36 @@
 package io.github.stealingdapenta.damageindicator.config;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import java.util.Objects;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class ConfigurationFileManager {
+public enum ConfigurationFileManager {
+    CONFIGURATION_FILE_MANAGER;
 
-    private static ConfigurationFileManager instance;
-
-    private ConfigurationFileManager() {
-    }
-
-    public static ConfigurationFileManager getInstance() {
-        if (Objects.isNull(instance)) {
-            instance = new ConfigurationFileManager();
-        }
-        return instance;
-    }
-
+    /**
+     * Loads the configuration file, ensuring all default values from ConfigKeys are registered.
+     */
     public void loadConfig() {
         JavaPlugin plugin = DamageIndicator.getInstance();
 
-        plugin.saveDefaultConfig();
-        FileConfiguration configuration = plugin.getConfig();
+        plugin.saveDefaultConfig(); // only saves if config doesn't exist
+        FileConfiguration config = plugin.getConfig();
 
-        // set default configurations
-        for (ConfigKeys defaultConfig : ConfigKeys.values()) {
-            configuration.addDefault(defaultConfig.name()
-                                                  .toLowerCase(), defaultConfig.getDefaultValue());
+        for (ConfigKeys key : ConfigKeys.values()) {
+            config.addDefault(key.name()
+                                 .toLowerCase(), key.getDefaultValue());
         }
 
-        configuration.options()
-                     .copyDefaults(true);
+        config.options()
+              .copyDefaults(true);
         plugin.saveConfig();
     }
 
+    /**
+     * Reloads the plugin configuration from disk.
+     */
     public void reloadConfig() {
-        JavaPlugin plugin = DamageIndicator.getInstance();
-        plugin.reloadConfig();
+        DamageIndicator.getInstance()
+                       .reloadConfig();
     }
 }
