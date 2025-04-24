@@ -1,6 +1,10 @@
 package io.github.stealingdapenta.damageindicator.config;
 
+/**
+ * Enum representing plugin permission nodes.
+ */
 public enum Permission {
+
     RELOAD("damageindicator.reload"),
     AREA_REMOVE("damageindicator.arearemove");
 
@@ -11,6 +15,11 @@ public enum Permission {
     }
 
     public String getNode() {
+        return node;
+    }
+
+    @Override
+    public String toString() {
         return node;
     }
 }
