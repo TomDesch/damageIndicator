@@ -50,3 +50,23 @@ sword or launching a fireball, you'll see the results — instantly and beautifu
 
 ---
 
+You control **everything** — from bar length, symbols, and colors to how fast holograms follow.
+
+📖 Full config reference: [`config.yml`](./src/main/resources/config.yml)
+
+---
+
+### ❤️ Support the Project
+
+If you enjoy using **DamageIndicator**, consider:
+
+- ⭐ Starring the [GitHub repo](https://github.com/stealingdapenta/damageindicator)
+- 🗣️ Sharing it with your server community
+- 💬 Joining the [**official Discord**](https://discord.gg/Hv4S43qUuG) for help, feature requests, and development updates!
+- 🌐 [SpigotMC Resource](https://www.spigotmc.org/resources/damage-indicator-healthbar.113612/)
+
+---
+
+## 📜 License
+
+This plugin is open-source and MIT-licensed. Do what you want — just don't claim it as your own. 😄
