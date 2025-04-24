@@ -1,0 +1,76 @@
+###########################################################################################
+#                                                                                         #
+#   📦 Damage Indicator Plugin - Configuration File                                       #
+#                                                                                         #
+#   🧑 Author: stealingdapenta                                                             #
+#   🔢 Version: 2.0.0 (Config Format)                                                     #
+#   🌐 SpigotMC: https://www.spigotmc.org/resources/damage-indicator-healthbar.113612/    #
+#                                                                                         #
+#   📄 Description:                                                                        #
+#     This file configures the appearance and behavior of the damage indicator system,    #
+#     including floating damage numbers, health bars, and optional hologram overlays.     #
+#                                                                                         #
+###########################################################################################
+
+# === Feature Toggles ===
+
+enable_damage_indicator: true             # Shows animated floating numbers on entity damage.
+enable_health_bar: true                   # Displays health bars above mobs using their custom name.
+enable_hologram_health_bar: false         # Replaces name-based bars with floating armor stand holograms.
+enable_holographic_custom_names: false    # Replaces entity names with holographic floating text.
+# Requires 'enable_hologram_health_bar' to be true.
+
+# === Health Bar Configuration ===
+
+health_bar_always_visible: true           # Keep the health bar visible at all times.
+health_bar_display_duration: 5            # Time in seconds the health bar stays after hit (range: 1–10).
+health_bar_length: 16                     # Total symbols shown in the bar.
+
+health_bar_prefix: "&(0,255,0)HP "        # Text shown before the health bar.
+health_bar_suffix: "&(0,255,0) <<"        # Text shown after the health bar.
+health_bar_alive_symbol: "&(0,255,0)♥"    # Symbol representing remaining health.
+health_bar_dead_symbol: "&(100,100,100)♡" # Symbol representing lost health.
+
+# === Hologram Visual Settings ===
+
+hologram_position: -0.3                   # Vertical offset for hologram health bars.
+hologram_name_position: 0.0               # Vertical offset for holographic custom names.
+hologram_follow_speed: 20                 # Speed (in ticks) at which holograms follow entities.
+
+# === Damage Type Color Mapping ===
+# These define the color of floating damage indicators based on the damage cause.
+
+magic: "&(95,10,95)"
+poison: "&(0,100,20)"
+fire: "&(200,90,25)"
+fall_damage: "&(205,92,92)"
+kill: "&(255,215,0)"
+world_border: "&(128,0,128)"
+contact: "&(205,92,92)"
+entity_attack: "&(100,100,100)"
+entity_sweep_attack: "&(100,100,100)"
+projectile: "&(130,70,0)"
+suffocation: "&(30,144,255)"
+fall: "&(0,255,0)"
+fire_tick: "&(200,90,25)"
+melting: "&(106,90,205)"
+lava: "&(200,90,25)"
+drowning: "&(0,255,255)"
+block_explosion: "&(255,165,0)"
+entity_explosion: "&(255,69,0)"
+void: "&(128,0,0)"
+lightning: "&(255,255,0)"
+suicide: "&(255,0,0)"
+starvation: "&(220,20,60)"
+wither: "&(139,0,139)"
+falling_block: "&(128,128,0)"
+thorns: "&(100,100,100)"
+dragon_breath: "&(255,0,255)"
+custom: "&(75,0,130)"
+fly_into_wall: "&(128,128,128)"
+hot_floor: "&(200,90,25)"
+cramming: "&(0,128,0)"
+dryout: "&(244,164,96)"
+freeze: "&(173,216,230)"
+sonic_boom: "&(255,215,0)"
+other: "&(130,130,30)"
