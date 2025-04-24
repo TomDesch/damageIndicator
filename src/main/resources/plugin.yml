@@ -1,25 +1,30 @@
-name: damageindicator
+name: DamageIndicator
 version: 2.0.0
 main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
-description: The best Damage Indicator in the game!
 api-version: 1.21
 
+description: >
+  The best Damage Indicator in the game! 
+  Features floating damage numbers, health bars, holograms, and full customization.
+
+# === Commands ===
 commands:
   reload:
-    description: Reload the configuration file without having to reboot the server.
+    description: Reload the configuration without restarting the server.
     usage: /<command>
     aliases: [ config, load, restart ]
 
   arearemove:
-    description: Remove stuck damage indicator related entities around you. This will kill all nearby holographs, but from this plugin only.
+    description: Remove nearby stuck damage indicator holograms (from this plugin only).
     usage: /<command>
 
-
+# === Permissions ===
 permissions:
   damageindicator.reload:
-    description: Allow usage of /config
+    description: Allows the user to reload the plugin config using /reload or its aliases.
     default: op
+
   damageindicator.arearemove:
-    description: Allow usage of /arearemove
+    description: Allows the user to execute /arearemove to clean up local indicators.
     default: op
