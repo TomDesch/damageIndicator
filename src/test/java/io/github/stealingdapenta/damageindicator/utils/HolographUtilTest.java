@@ -44,7 +44,7 @@ class HolographUtilTest {
         ArmorStand armorStand = mock(ArmorStand.class);
         LivingEntityTaskInfo taskInfo = new LivingEntityTaskInfo(taskStub, armorStand);
         data.put(livingEntity, taskInfo);
-        when(taskInfo.getArmorStand()
+        when(taskInfo.armorStand()
                      .isValid()).thenReturn(true);
 
         HOLOGRAPH_UTIL.cancelHologramFor(livingEntity, data);

@@ -59,14 +59,14 @@ public enum HolographUtil {
     public void cancelHologramFor(LivingEntity entity, Map<LivingEntity, LivingEntityTaskInfo> data) {
         LivingEntityTaskInfo info = data.remove(entity);
         if (info != null) {
-            if (info.getTask() != null && !info.getTask()
-                                               .isCancelled()) {
-                info.getTask()
+            if (info.task() != null && !info.task()
+                                            .isCancelled()) {
+                info.task()
                     .cancel();
             }
-            if (info.getArmorStand() != null && info.getArmorStand()
-                                                    .isValid()) {
-                info.getArmorStand()
+            if (info.armorStand() != null && info.armorStand()
+                                                 .isValid()) {
+                info.armorStand()
                     .remove();
             }
         }
