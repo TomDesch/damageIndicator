@@ -3,174 +3,127 @@ package io.github.stealingdapenta.damageindicator.utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.format.TextDecoration.State;
 
-public class TextUtil {
+/**
+ * Utility singleton for formatting text with Adventure components using color codes and style flags. Supports both RGB (&(R,G,B)) and decorators like &b (bold), &u (underlined), etc.
+ */
+public enum TextUtil {
+    TEXT_UTIL;
 
-    /**
-     * All possible formatting options, exhausted list: b s u i o matching bold strikethrough underline italic obfuscated
-     */
-    private static final Map<String, TextDecoration> FORMAT_CODE_STYLES = Map.of("b", TextDecoration.BOLD, "s", TextDecoration.STRIKETHROUGH, "u",
-                                                                                 TextDecoration.UNDERLINED, "i", TextDecoration.ITALIC, "o",
-                                                                                 TextDecoration.OBFUSCATED);
-    private static final Pattern RGB_PATTERN = Pattern.compile("&(\\(\\d{1,3},\\d{1,3},\\d{1,3}\\))");
+    private static final Map<String, TextDecoration> FORMAT_CODE_STYLES = Map.of("b", TextDecoration.BOLD, "s", TextDecoration.STRIKETHROUGH, "u", TextDecoration.UNDERLINED, "i", TextDecoration.ITALIC, "o", TextDecoration.OBFUSCATED);
+
+    // Now allows optional whitespace inside the RGB tuple
+    private static final Pattern RGB_PATTERN = Pattern.compile("&\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*\\)");
     private static final Pattern DECORATOR_PATTERN = Pattern.compile("&([buosir])");
+    private static final Pattern TEXT_PATTERN = Pattern.compile(RGB_PATTERN.pattern() + "|" + DECORATOR_PATTERN.pattern());
+
     /**
-     * This regex is designed to match color codes in the format &(r,g,b) or the style codes &b, &u, &o, &s, or &i. The backslashes are used to escape
-     * parentheses, and capturing groups allow extracting the individual color components. Examples: &(12,7,222), &(255,255,255), &b, &u, &o, &s, &i (.*) allows
-     * all the text after.
+     * Parses a string with Adventure formatting codes into a TextComponent. Supports: color codes (&(r,g,b)) and decorator codes (&b, &i, &r, etc.)
      */
-    private static final Pattern TEXT_PATTERN = Pattern.compile(RGB_PATTERN + "|" + DECORATOR_PATTERN);
-    private static TextUtil instance;
-
-    public static TextUtil getInstance() {
-        if (Objects.isNull(instance)) {
-            instance = new TextUtil();
-        }
-
-        return instance;
-    }
-
-    Style createStyle(TextDecoration decoration) {
-        return Style.style()
-                    .decoration(decoration, State.TRUE)
-                    .build();
-    }
-
-
     public TextComponent parseFormattedString(String input) {
         String[] segments = splitByPatternWithDelimiters(input);
 
-        if (segments.length <= 1) {
+        if (segments.length == 1) {
             return Component.text(segments[0]);
         }
 
-        List<TextComponent> formattedSegments = new ArrayList<>();
+        List<TextComponent> formatted = new ArrayList<>();
+        TextComponent.Builder builder = Component.text();
 
-        TextComponent.Builder textSegment = Component.text();
-
-        int index = 0;
-
-        while (index < segments.length) {
-            if (Objects.isNull(textSegment)) {
-                textSegment = Component.text();
-            }
-            String currentElement = segments[index];
-
-            if (isRgbPattern(currentElement)) {
-                textSegment.color(parseRGB(currentElement));
-            } else if (isDecoratorPattern(currentElement)) {
-                if (currentElement.contains("r")) {
-                    disableAllStyle(textSegment);
+        for (String segment : segments) {
+            if (isRgbPattern(segment)) {
+                builder.color(parseRGB(segment));
+            } else if (isDecoratorPattern(segment)) {
+                String code = segment.substring(1);
+                if ("r".equals(code)) {
+                    // Flush current styled content (if any)
+                    if (!builder.content()
+                                .isEmpty()) {
+                        formatted.add(builder.build());
+                    }
+                    builder = Component.text();
+                    disableAllStyle(builder); // reset styles for next segment
                 } else {
-                    textSegment.decorate(FORMAT_CODE_STYLES.get(currentElement.substring(1)));
+                    builder.decorate(FORMAT_CODE_STYLES.get(code));
                 }
-            } else if (!currentElement.isBlank()) {
-                if (textSegment.content()
-                               .isEmpty()) {
-                    textSegment.content(currentElement);
-                    formattedSegments.add(textSegment.build());
-                    textSegment = null;
+            } else if (!segment.isBlank()) {
+                if (builder.content()
+                           .isEmpty()) {
+                    builder.content(segment);
+                    formatted.add(builder.build());
+                    builder = Component.text();
                 }
             }
-
-            index++;
         }
 
-        return combineTextComponents(formattedSegments);
+        return combineTextComponents(formatted);
     }
-
-    private void disableAllStyle(TextComponent.Builder componentBuilder) {
-        for (TextDecoration decoration : TextDecoration.values()) {
-            componentBuilder.decoration(decoration, State.FALSE);
-        }
-
-        componentBuilder.color(TextColor.color(0xFFFFFF));
-    }
-
 
     /**
-     * This method is stolen from Java 21 library & adapted to only suit my needs. When upgrading back to J21, then this method should be replaced with the
-     * native one.
+     * Removes all styling and sets color to white.
      */
-    private String[] splitByPatternWithDelimiters(CharSequence input) {
-        int index = 0;
-        ArrayList<String> matchList = new ArrayList<>();
-        Matcher m = TEXT_PATTERN.matcher(input);
-
-        // Add segments before each match found
-        while (m.find()) {
-            {
-                if (index == 0 && index == m.start() && 0 == m.end()) {
-                    // no empty leading substring included for zero-width match
-                    // at the beginning of the input char sequence.
-                    continue;
-                }
-                String match = input.subSequence(index, m.start())
-                                    .toString();
-                matchList.add(match);
-                index = m.end();
-
-                matchList.add(input.subSequence(m.start(), index)
-                                   .toString()); // Add the delimiter
-
-            }
+    private void disableAllStyle(TextComponent.Builder builder) {
+        for (TextDecoration d : TextDecoration.values()) {
+            builder.decoration(d, TextDecoration.State.FALSE);
         }
-
-        // If no match was found, return this
-        if (index == 0) {
-            return new String[]{input.toString()};
-        }
-
-        // Add remaining segment
-        matchList.add(input.subSequence(index, input.length())
-                           .toString());
-
-        // Construct result
-        int resultSize = matchList.size();
-        while (resultSize > 0 && matchList.get(resultSize - 1)
-                                          .isEmpty()) {
-            resultSize--;
-        }
-        String[] result = new String[resultSize];
-        return matchList.subList(0, resultSize)
-                        .toArray(result);
+        builder.color(TextColor.color(0xFFFFFF)); // reset to white
     }
 
-    TextComponent combineTextComponents(List<TextComponent> textComponents) {
+    /**
+     * Combines a list of components into a single one. Throws if empty.
+     */
+    public TextComponent combineTextComponents(List<TextComponent> textComponents) {
         if (textComponents.isEmpty()) {
             throw new IllegalArgumentException("At least one TextComponent must be provided");
         }
 
-        TextComponent combinedComponent = textComponents.get(textComponents.size() - 1);
+        TextComponent combined = textComponents.get(0);
+        for (int i = 1; i < textComponents.size(); i++) {
+            combined = combined.append(textComponents.get(i));
+        }
+        return combined;
+    }
 
-        for (int i = textComponents.size() - 2; i >= 0; i--) {
-            combinedComponent = textComponents.get(i)
-                                              .append(combinedComponent);
+    /**
+     * Parses an RGB color from a string like &(255,255,255)
+     */
+    public TextColor parseRGB(String input) {
+        Matcher matcher = RGB_PATTERN.matcher(input.replace(" ", ""));
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Problem formatting RGB from input: " + input);
         }
 
-        return combinedComponent;
+        int red = toValidRGB(parseRGBComponent(matcher.group(1)));
+        int green = toValidRGB(parseRGBComponent(matcher.group(2)));
+        int blue = toValidRGB(parseRGBComponent(matcher.group(3)));
+
+        return TextColor.color(red, green, blue);
     }
 
-
-    private boolean isRgbPattern(String element) {
-        return RGB_PATTERN.matcher(element)
-                          .matches();
+    /**
+     * Parses an integer color component, throwing if invalid.
+     */
+    public int parseRGBComponent(String part) {
+        try {
+            return Integer.parseInt(part.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid RGB component: " + part, e);
+        }
     }
 
-    private boolean isDecoratorPattern(String element) {
-        return DECORATOR_PATTERN.matcher(element)
-                                .matches();
+    private int toValidRGB(int value) {
+        return value % 256;
     }
 
+    /**
+     * Repeats a styled text component's content n times while preserving style.
+     */
     public TextComponent repeatTextWithStyles(TextComponent textComponent, int times) {
         if (times < 0) {
             throw new IllegalArgumentException("Number of repetitions should be greater than zero.");
@@ -182,34 +135,38 @@ public class TextUtil {
                             .build();
     }
 
-
-    public TextColor parseRGB(String input) {
-        Matcher matcher = RGB_PATTERN.matcher(input.replace(" ", ""));
-
-        if (!matcher.matches()) {
-            throw new IllegalArgumentException("Problem formatting RGB from input.");
-        }
-
-        String rgbString = matcher.group(1)
-                                  .replaceAll("[()]", ""); // Remove parentheses
-        String[] rgbComponents = rgbString.split(",");
-
-        int red = parseRGBComponent(rgbComponents[0]);
-        int green = parseRGBComponent(rgbComponents[1]);
-        int blue = parseRGBComponent(rgbComponents[2]);
-
-        return TextColor.color(toValidRGB(red), toValidRGB(green), toValidRGB(blue));
+    private boolean isRgbPattern(String segment) {
+        return RGB_PATTERN.matcher(segment)
+                          .matches();
     }
 
-    int parseRGBComponent(String component) {
-        try {
-            return Integer.parseInt(component);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid RGB component: " + component, e);
-        }
+    private boolean isDecoratorPattern(String segment) {
+        return DECORATOR_PATTERN.matcher(segment)
+                                .matches();
     }
 
-    private int toValidRGB(int value) {
-        return value % 256;
+    /**
+     * Splits an input string while preserving style codes as separate segments. Similar to Java 21's splitWithDelimiters, adapted for current usage.
+     */
+    private String[] splitByPatternWithDelimiters(CharSequence input) {
+        List<String> parts = new ArrayList<>();
+        Matcher matcher = TEXT_PATTERN.matcher(input);
+
+        int last = 0;
+        while (matcher.find()) {
+            if (matcher.start() > last) {
+                parts.add(input.subSequence(last, matcher.start())
+                               .toString());
+            }
+            parts.add(matcher.group()); // full match
+            last = matcher.end();
+        }
+
+        if (last < input.length()) {
+            parts.add(input.subSequence(last, input.length())
+                           .toString());
+        }
+
+        return parts.toArray(new String[0]);
     }
 }

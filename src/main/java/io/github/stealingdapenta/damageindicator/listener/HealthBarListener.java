@@ -11,10 +11,10 @@ import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_POSITION;
 import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
-import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -44,8 +44,6 @@ public class HealthBarListener implements Listener {
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
     private final Map<LivingEntity, Component> originalEntityNames = new HashMap<>();
-
-    private final TextUtil textUtil = TextUtil.getInstance();
 
     /**
      * Displays the health bar after an entity takes damage.
@@ -202,8 +200,8 @@ public class HealthBarListener implements Listener {
         int dead = Math.min(total - 1, Math.max(0, (int) Math.round(percent * total)));
         int alive = total - dead;
 
-        TextComponent alivePart = textUtil.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive);
-        TextComponent deadPart = textUtil.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), dead);
+        TextComponent alivePart = TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive);
+        TextComponent deadPart = TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), dead);
 
         return HEALTH_BAR_PREFIX.asFormattedString()
                                 .append(alivePart.append(deadPart))

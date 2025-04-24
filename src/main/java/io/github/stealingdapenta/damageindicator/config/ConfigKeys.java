@@ -1,7 +1,8 @@
 package io.github.stealingdapenta.damageindicator.config;
 
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
+
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -59,7 +60,6 @@ public enum ConfigKeys {
 
     private final String defaultValue;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
-    private static final TextUtil textUtil = TextUtil.getInstance();
 
     ConfigKeys(String defaultValue) {
         this.defaultValue = defaultValue;
@@ -98,11 +98,11 @@ public enum ConfigKeys {
     }
 
     public TextColor getTextColor() {
-        return textUtil.parseRGB(asString());
+        return TEXT_UTIL.parseRGB(asString());
     }
 
     public TextComponent asFormattedString() {
-        return textUtil.parseFormattedString(asString());
+        return TEXT_UTIL.parseFormattedString(asString());
     }
 
     private void logParseWarning(String key) {

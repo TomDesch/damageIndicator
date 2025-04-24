@@ -1,5 +1,6 @@
 package io.github.stealingdapenta.damageindicator.utils;
 
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -16,7 +17,6 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.format.TextDecoration.State;
 import org.junit.jupiter.api.Test;
 
 class TextUtilTest {
@@ -29,18 +29,6 @@ class TextUtilTest {
      * all the text after.
      */
     private static final Pattern TEXT_PATTERN = Pattern.compile(RGB_PATTERN + "*+" + "|" + DECORATOR_PATTERN + "*+");
-    private final TextUtil textUtil = TextUtil.getInstance();
-
-    @Test
-    void createStyle_ValidDecoration_ReturnsCorrectStyle() {
-        TextDecoration validDecoration = TextDecoration.STRIKETHROUGH;
-
-        Style result = textUtil.createStyle(validDecoration);
-
-        assertNotNull(result);
-        assertTrue(result.hasDecoration(validDecoration));
-        assertEquals(State.TRUE, result.decoration(validDecoration));
-    }
 
     @Test
     void TEXT_PATTERN_ColorCode_Matches() {
@@ -64,8 +52,7 @@ class TextUtilTest {
 
     @Test
     void combineTextComponents_EmptyList_IllegalArgumentExceptionThrown() {
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                                                          () -> textUtil.combineTextComponents(Collections.emptyList()));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> TEXT_UTIL.combineTextComponents(Collections.emptyList()));
 
         assertEquals("At least one TextComponent must be provided", exception.getMessage());
     }
@@ -74,7 +61,7 @@ class TextUtilTest {
     @Test
     void parseRGB_Valid_Success() {
         String input = "&(100, 150, 200)";
-        TextColor result = textUtil.parseRGB(input);
+        TextColor result = TEXT_UTIL.parseRGB(input);
         assertNotNull(result);
         assertEquals(100, result.red());
         assertEquals(150, result.green());
@@ -84,7 +71,7 @@ class TextUtilTest {
     @Test
     void parseRGB_LeadingSpaces_Success() {
         String input = "  &(50, 100, 150)";
-        TextColor result = textUtil.parseRGB(input);
+        TextColor result = TEXT_UTIL.parseRGB(input);
         assertNotNull(result);
         assertEquals(50, result.red());
         assertEquals(100, result.green());
@@ -94,7 +81,7 @@ class TextUtilTest {
     @Test
     void parseRGB_TrailingSpaces_Success() {
         String input = "&(25, 75, 125)  ";
-        TextColor result = textUtil.parseRGB(input);
+        TextColor result = TEXT_UTIL.parseRGB(input);
         assertNotNull(result);
         assertEquals(25, result.red());
         assertEquals(75, result.green());
@@ -104,13 +91,13 @@ class TextUtilTest {
     @Test
     void parseRGB_Invalid_IllegalArgumentException() {
         String input = "&(aaa, 555, 777)";
-        assertThrows(IllegalArgumentException.class, () -> textUtil.parseRGB(input));
+        assertThrows(IllegalArgumentException.class, () -> TEXT_UTIL.parseRGB(input));
     }
 
     @Test
     void parseRGB_TooHighValues_Success() {
         String input = "&(256, 512, 768)";
-        TextColor result = textUtil.parseRGB(input);
+        TextColor result = TEXT_UTIL.parseRGB(input);
         assertNotNull(result);
         assertEquals(0, result.red());
         assertEquals(0, result.green());
@@ -129,7 +116,7 @@ class TextUtilTest {
     void parseFormattedString_NoFormat_PlainText() {
         String input = "Hello, World!";
 
-        TextComponent result = textUtil.parseFormattedString(input);
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
 
         TextComponent expected = Component.text(input);
         assertEquals(expected, result);
@@ -140,7 +127,7 @@ class TextUtilTest {
         String input = "&(255,0,0)Red Text";
         TextColor color = TextColor.color(255, 0, 0);
 
-        TextComponent result = textUtil.parseFormattedString(input);
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
 
         TextComponent expected = Component.text("Red Text", color);
         assertEquals(expected, result);
@@ -149,7 +136,7 @@ class TextUtilTest {
     @Test
     void parseFormattedString_DecorationCodes_Formatted() {
         String input = "&bBold Text";
-        TextComponent result = textUtil.parseFormattedString(input);
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
 
         TextComponent expected = Component.text("Bold Text", Style.style(TextDecoration.BOLD));
         assertEquals(expected, result);
@@ -160,7 +147,7 @@ class TextUtilTest {
         String input = "&(0,0,0)&bFormatted Text";
         TextColor color = TextColor.color(0, 0, 0);
 
-        TextComponent result = textUtil.parseFormattedString(input);
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
         TextComponent expected = Component.text("Formatted Text", color, TextDecoration.BOLD);
 
         assertEquals(expected, result);
@@ -171,7 +158,7 @@ class TextUtilTest {
         String input = "Some unformatted and some &(0,0,0)&bFormatted Text";
         TextColor color = TextColor.color(0, 0, 0);
 
-        TextComponent result = textUtil.parseFormattedString(input);
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
         TextComponent expected = Component.text("Some unformatted and some ")
                                           .append(Component.text("Formatted Text", color, TextDecoration.BOLD));
 
@@ -183,10 +170,11 @@ class TextUtilTest {
         String input = "Some unformatted and some &(0,0,0)&bFormatted Text &rexcept this";
         TextColor color = TextColor.color(0, 0, 0);
 
-        TextComponent result = textUtil.parseFormattedString(input);
         TextComponent expected = Component.text("Some unformatted and some ")
-                                          .append(Component.text("Formatted Text ", color, TextDecoration.BOLD)
-                                                           .append(Component.text("except this", resetStyle())));
+                                          .append(Component.text("Formatted Text ", color, TextDecoration.BOLD))
+                                          .append(Component.text("except this", resetStyle()));
+
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
 
         assertEquals(expected, result);
     }
@@ -195,7 +183,7 @@ class TextUtilTest {
     void parseFormattedString_InvalidFormatCodes_PlainText() {
         String input = "&InvalidCode&Text";
 
-        TextComponent result = textUtil.parseFormattedString(input);
+        TextComponent result = TEXT_UTIL.parseFormattedString(input);
 
         TextComponent expected = Component.text(input);
         assertEquals(expected, result);
@@ -204,7 +192,7 @@ class TextUtilTest {
     @Test
     void parseRGBComponent_InvalidComponent_NumberFormatExceptionThrown() {
         String invalidComponent = "invalid";
-        assertThrows(IllegalArgumentException.class, () -> textUtil.parseRGBComponent(invalidComponent));
+        assertThrows(IllegalArgumentException.class, () -> TEXT_UTIL.parseRGBComponent(invalidComponent));
     }
 
     @Test
@@ -213,7 +201,7 @@ class TextUtilTest {
                                                    .color(TextColor.color(255, 0, 0));
         int times = 1;
 
-        TextComponent repeatedComponent = textUtil.repeatTextWithStyles(originalComponent, times);
+        TextComponent repeatedComponent = TEXT_UTIL.repeatTextWithStyles(originalComponent, times);
 
         assertEquals(originalComponent, repeatedComponent);
     }
@@ -224,7 +212,7 @@ class TextUtilTest {
                                                    .color(TextColor.color(255, 123, 0));
         int times = 3;
 
-        TextComponent repeatedComponent = textUtil.repeatTextWithStyles(originalComponent, times);
+        TextComponent repeatedComponent = TEXT_UTIL.repeatTextWithStyles(originalComponent, times);
 
         assertEquals(originalComponent.content() + originalComponent.content() + originalComponent.content(), repeatedComponent.content());
         assertEquals(originalComponent.style(), repeatedComponent.style());
@@ -235,7 +223,7 @@ class TextUtilTest {
         TextComponent originalComponent = Component.text("Hello");
         int times = -1;
 
-        assertThrows(IllegalArgumentException.class, () -> textUtil.repeatTextWithStyles(originalComponent, times));
+        assertThrows(IllegalArgumentException.class, () -> TEXT_UTIL.repeatTextWithStyles(originalComponent, times));
     }
 
     private Style resetStyle() {
