@@ -19,6 +19,10 @@ commands:
     description: Remove nearby stuck damage indicator holograms (from this plugin only).
     usage: /<command>
 
+  arearename:
+    description: Rename nearby stuck health bars. Warning! This will remove ALL custom names in the area!
+    usage: /<command>
+
 # === Permissions ===
 permissions:
   damageindicator.reload:
