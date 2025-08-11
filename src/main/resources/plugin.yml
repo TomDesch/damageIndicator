@@ -1,5 +1,5 @@
 name: DamageIndicator
-version: 2.0.0
+version: 2.0.1
 main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
 api-version: 1.21
@@ -27,4 +27,8 @@ permissions:
 
   damageindicator.arearemove:
     description: Allows the user to execute /arearemove to clean up local indicators.
+    default: op
+
+  damageindicator.arearename:
+    description: Allows the user to execute /arearename to rename local indicators. Warning! This will remove ALL custom names in the area!
     default: op

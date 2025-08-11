@@ -6,7 +6,8 @@ package io.github.stealingdapenta.damageindicator.config;
 public enum Permission {
 
     RELOAD("damageindicator.reload"),
-    AREA_REMOVE("damageindicator.arearemove");
+    AREA_REMOVE("damageindicator.arearemove"),
+    AREA_RENAME("damageindicator.arearename");
 
     private final String node;
 
