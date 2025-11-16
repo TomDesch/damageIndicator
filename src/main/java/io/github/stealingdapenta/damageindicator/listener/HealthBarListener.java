@@ -29,6 +29,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -70,29 +71,36 @@ public class HealthBarListener implements Listener {
      * Updates the health bar when an entity regains health.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void updateHealthBarOnHeal(org.bukkit.event.entity.EntityRegainHealthEvent event) {
+    public void updateHealthBarOnHeal(EntityRegainHealthEvent event) {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
             return;
         }
 
-        // Only update if the entity already has an active health bar
         boolean hasActiveBar = ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean() ? entitiesWithActiveHologramBars.containsKey(livingEntity) : entitiesWithActiveHealthBars.containsKey(livingEntity);
 
         if (!hasActiveBar && !HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
-            return;
+            return; // respect visibility rules
         }
 
-        double newHealth = Math.min(livingEntity.getHealth() + event.getAmount(), Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
-                                                                                         .getValue());
-        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
-                                  .getValue();
-        Component name = createHealthBar(newHealth, maxHealth);
+        // Defer one tick so the healing is fully applied before we read health.
+        DamageIndicator.getInstance()
+                       .getServer()
+                       .getScheduler()
+                       .runTask(DamageIndicator.getInstance(), () -> {
+                           if (!livingEntity.isValid()) {
+                               return;
+                           }
+                           double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
+                                                     .getValue();
+                           double currentHealth = Math.min(livingEntity.getHealth(), maxHealth);
+                           Component name = createHealthBar(currentHealth, maxHealth);
 
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-            displayHolographicHealthBar(livingEntity, name);
-        } else {
-            displayCustomNameHealthBar(livingEntity, name);
-        }
+                           if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+                               displayHolographicHealthBar(livingEntity, name);
+                           } else {
+                               displayCustomNameHealthBar(livingEntity, name);
+                           }
+                       });
     }
 
 
