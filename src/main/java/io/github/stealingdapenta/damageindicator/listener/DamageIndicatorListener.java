@@ -208,13 +208,13 @@ public class DamageIndicatorListener implements Listener {
                 .cancel();
         }
 
-        // Enable gravity and give upward velocity for jump effect
+        // Enable gravity and give upward velocity for jump effect (same as regular damage)
         armorStand.setGravity(true);
-        double jumpHeight = ConfigKeys.DAMAGE_MERGE_JUMP_HEIGHT.asDouble();
+        double initialVelocityY = ConfigKeys.HOLOGRAM_VELOCITY_Y.asDouble();
         int duration = ConfigKeys.DAMAGE_MERGE_JUMP_DURATION.asInt();
         double gravity = ConfigKeys.HOLOGRAM_GRAVITY.asDouble();
 
-        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), jumpHeight, (Math.random() * 0.1 - 0.05));
+        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));
 
         AtomicInteger steps = new AtomicInteger(duration);
 
