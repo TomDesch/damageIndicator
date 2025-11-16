@@ -25,14 +25,13 @@ public enum HolographUtil {
         return location.getWorld()
                        .spawn(location, ArmorStand.class, armorStand -> {
                            armorStand.customName(name);
-            armorStand.setCustomNameVisible(true);
-            armorStand.setVisible(false);
+                           armorStand.setCustomNameVisible(true);
+                           armorStand.setVisible(false);
                            armorStand.setMarker(true);
                            armorStand.setGravity(false);
-            armorStand.setSmall(true);
+                           armorStand.setSmall(true);
                            armorStand.setCollidable(false);
                            armorStand.setInvulnerable(true);
-
                            armorStand.getPersistentDataContainer()
                                      .set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
                        });

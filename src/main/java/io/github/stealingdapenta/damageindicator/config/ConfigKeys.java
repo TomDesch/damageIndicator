@@ -56,7 +56,12 @@ public enum ConfigKeys {
     ENABLE_HOLOGRAPHIC_CUSTOM_NAMES("true"),
     HOLOGRAM_NAME_POSITION("0"),
     HOLOGRAM_FOLLOW_SPEED("3"),
-    HEALTH_BAR_ALWAYS_VISIBLE("false");
+    HEALTH_BAR_ALWAYS_VISIBLE("false"),
+    ENABLE_DAMAGE_MERGE("true"),
+    DAMAGE_MERGE_TIMEOUT("1.5"),
+    DAMAGE_MERGE_JUMP_DURATION("15"),
+    HOLOGRAM_VELOCITY_Y("0.15"),
+    HOLOGRAM_GRAVITY("0.01");
 
     private final String defaultValue;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
