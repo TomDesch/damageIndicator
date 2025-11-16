@@ -43,13 +43,13 @@ public class DamageIndicator extends JavaPlugin {
         if (ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
             registerFeature(damageIndicatorListener, "Damage indicator");
         } else {
-            logDisabled("Damage indicator");
+            logDisabledFeature("Damage indicator");
         }
 
         if (ConfigKeys.ENABLE_HEALTH_BAR.asBoolean()) {
             registerFeature(healthBarListener, "Health bar");
         } else {
-            logDisabled("Health bar");
+            logDisabledFeature("Health bar");
         }
 
         if (ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean()) {
@@ -59,7 +59,7 @@ public class DamageIndicator extends JavaPlugin {
                 getLogger().warning("Holographic custom names enabled, but holographic health bar is disabled. Enable both for expected behavior.");
             }
         } else {
-            logDisabled("Holographic custom names");
+            logDisabledFeature("Holographic custom names");
         }
 
         getLogger().info("Damage Indicator plugin enabled.");
@@ -86,7 +86,7 @@ public class DamageIndicator extends JavaPlugin {
         getLogger().info(featureName + " feature enabled.");
     }
 
-    private void logDisabled(String featureName) {
+    private void logDisabledFeature(String featureName) {
         getLogger().info(featureName + " feature not enabled. You can enable it in config.yml.");
     }
 }

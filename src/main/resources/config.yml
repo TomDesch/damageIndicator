@@ -37,6 +37,13 @@ hologram_position: -0.3                   # Vertical offset for hologram health 
 hologram_name_position: 0.0               # Vertical offset for holographic custom names.
 hologram_follow_speed: 20                 # Speed (in ticks) at which holograms follow entities.
 
+# === Damage Merge Settings ===
+
+enable_damage_merge: true                 # Merge consecutive damage from same attacker into one hologram.
+damage_merge_timeout: 1.5                 # Seconds of inactivity before damage is finalized and jumps out.
+damage_merge_jump_height: 0.3             # How high the merged damage number jumps when finalized.
+damage_merge_jump_duration: 15            # Duration in ticks for the jump animation before disappearing.
+
 # === Damage Type Color Mapping ===
 # These define the color of floating damage indicators based on the damage cause.
 
