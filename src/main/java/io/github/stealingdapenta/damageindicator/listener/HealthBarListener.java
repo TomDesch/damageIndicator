@@ -67,6 +67,36 @@ public class HealthBarListener implements Listener {
     }
 
     /**
+     * Updates the health bar when an entity regains health.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void updateHealthBarOnHeal(org.bukkit.event.entity.EntityRegainHealthEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
+            return;
+        }
+
+        // Only update if the entity already has an active health bar
+        boolean hasActiveBar = ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean() ? entitiesWithActiveHologramBars.containsKey(livingEntity) : entitiesWithActiveHealthBars.containsKey(livingEntity);
+
+        if (!hasActiveBar && !HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
+            return;
+        }
+
+        double newHealth = Math.min(livingEntity.getHealth() + event.getAmount(), Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
+                                                                                         .getValue());
+        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
+                                  .getValue();
+        Component name = createHealthBar(newHealth, maxHealth);
+
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+            displayHolographicHealthBar(livingEntity, name);
+        } else {
+            displayCustomNameHealthBar(livingEntity, name);
+        }
+    }
+
+
+    /**
      * Restores the attacker's name after they kill another entity.
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
