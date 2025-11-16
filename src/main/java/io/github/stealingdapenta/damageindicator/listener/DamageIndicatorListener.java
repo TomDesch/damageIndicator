@@ -212,6 +212,7 @@ public class DamageIndicatorListener implements Listener {
         armorStand.setGravity(true);
         double jumpHeight = ConfigKeys.DAMAGE_MERGE_JUMP_HEIGHT.asDouble();
         int duration = ConfigKeys.DAMAGE_MERGE_JUMP_DURATION.asInt();
+        double gravity = ConfigKeys.HOLOGRAM_GRAVITY.asDouble();
 
         Vector velocity = new Vector((Math.random() * 0.1 - 0.05), jumpHeight, (Math.random() * 0.1 - 0.05));
 
@@ -226,7 +227,7 @@ public class DamageIndicatorListener implements Listener {
 
                   armorStand.teleport(armorStand.getLocation()
                                                 .add(velocity));
-                  velocity.subtract(new Vector(0, 0.01, 0)); // simulate gravity
+                  velocity.subtract(new Vector(0, gravity, 0)); // apply gravity
 
                   if (steps.decrementAndGet() <= 0) {
                       armorStand.remove();
@@ -312,7 +313,10 @@ public class DamageIndicatorListener implements Listener {
     public void animateArmorStand(Location location, double damage, TextColor color) {
         ArmorStand armorStand = createArmorStand(location, damage, color);
 
-        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), 0.15, (Math.random() * 0.1 - 0.05));
+        double initialVelocityY = ConfigKeys.HOLOGRAM_VELOCITY_Y.asDouble();
+        double gravity = ConfigKeys.HOLOGRAM_GRAVITY.asDouble();
+
+        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));
 
         AtomicInteger steps = new AtomicInteger(30); // 30 ticks total
         int intervalTicks = 0; // run every tick (change if performance needed)
@@ -321,7 +325,7 @@ public class DamageIndicatorListener implements Listener {
               .runTaskTimer(DamageIndicator.getInstance(), task -> {
                   armorStand.teleport(armorStand.getLocation()
                                                 .add(velocity));
-                  velocity.subtract(new Vector(0, 0.01, 0)); // simulate gravity
+                  velocity.subtract(new Vector(0, gravity, 0)); // apply gravity
 
                   if (steps.decrementAndGet() <= 0) {
                       armorStand.remove();
