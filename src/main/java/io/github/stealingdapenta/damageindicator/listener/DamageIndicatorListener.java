@@ -125,7 +125,7 @@ public class DamageIndicatorListener implements Listener {
     }
 
     /**
-     * Resolves the actual attacker from the damager entity. If the damager is a projectile, returns the shooter instead.
+     * Resolves the actual attacker from the damager entity. If the damager is a projectile, return the shooter instead.
      */
     private Entity resolveActualAttacker(Entity damager) {
         if (damager instanceof org.bukkit.entity.Projectile projectile) {
