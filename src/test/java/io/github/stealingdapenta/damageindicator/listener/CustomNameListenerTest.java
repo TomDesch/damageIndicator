@@ -27,6 +27,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -104,8 +105,10 @@ class CustomNameListenerTest {
     @Test
     void restoreCustomNameVisibility_ValidNamedEntityMakesNameVisible() throws Exception {
         LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
         when(entity.isValid()).thenReturn(true);
         when(entity.getCustomName()).thenReturn("VisibleName");
+        when(entity.getPersistentDataContainer()).thenReturn(data);
 
         Method method = CustomNameListener.class.getDeclaredMethod("restoreCustomNameVisibility", LivingEntity.class);
         method.setAccessible(true);
@@ -118,12 +121,14 @@ class CustomNameListenerTest {
     @SuppressWarnings("unchecked")
     void shutdown_RemovesHologramsAndRestoresNameVisibility() throws Exception {
         LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
         ArmorStand armorStand = mock(ArmorStand.class);
         BukkitTask task = mock(BukkitTask.class);
         when(entity.isValid()).thenReturn(true);
         when(entity.getCustomName()).thenReturn("VisibleName");
         when(armorStand.isValid()).thenReturn(true);
         when(task.isCancelled()).thenReturn(false);
+        when(entity.getPersistentDataContainer()).thenReturn(data);
 
         Field field = CustomNameListener.class.getDeclaredField("entitiesWithActiveHolographicCustomNames");
         field.setAccessible(true);

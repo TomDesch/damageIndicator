@@ -44,6 +44,8 @@ public class DamageIndicator extends JavaPlugin {
         registerListener(healthBarListener);
         registerListener(customNamesListener);
         logFeatureStates();
+        healthBarListener.restorePersistedNames();
+        customNamesListener.restorePersistedNames();
         damageIndicatorListener.cleanupLoadedChunks();
         customNamesListener.refreshLoadedEntities();
 

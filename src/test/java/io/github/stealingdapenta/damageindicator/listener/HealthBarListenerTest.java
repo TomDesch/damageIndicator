@@ -14,6 +14,7 @@ import java.util.Set;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
 
@@ -51,8 +52,10 @@ class HealthBarListenerTest {
     void rememberOriginalName_DoesNotOverwriteNameOnLaterUpdates() throws Exception {
         HealthBarListener listener = new HealthBarListener();
         LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
         when(entity.getCustomName()).thenReturn("Original name", "Current health bar");
         when(entity.isCustomNameVisible()).thenReturn(false);
+        when(entity.getPersistentDataContainer()).thenReturn(data);
 
         Method remember = HealthBarListener.class.getDeclaredMethod("rememberOriginalName", LivingEntity.class);
         remember.setAccessible(true);
@@ -72,10 +75,12 @@ class HealthBarListenerTest {
     void shutdown_CancelsTasksAndRestoresOriginalNames() throws Exception {
         HealthBarListener listener = new HealthBarListener();
         LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
         BukkitTask task = mock(BukkitTask.class);
         BukkitTask pendingTask = mock(BukkitTask.class);
         when(task.isCancelled()).thenReturn(false);
         when(pendingTask.isCancelled()).thenReturn(false);
+        when(entity.getPersistentDataContainer()).thenReturn(data);
 
         Field tasksField = HealthBarListener.class.getDeclaredField("entitiesWithActiveHealthBars");
         tasksField.setAccessible(true);
@@ -121,8 +126,10 @@ class HealthBarListenerTest {
     void rememberOriginalName_TracksOriginallyUnnamedEntities() throws Exception {
         HealthBarListener listener = new HealthBarListener();
         LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
         when(entity.getCustomName()).thenReturn(null);
         when(entity.isCustomNameVisible()).thenReturn(false);
+        when(entity.getPersistentDataContainer()).thenReturn(data);
 
         Method remember = HealthBarListener.class.getDeclaredMethod("rememberOriginalName", LivingEntity.class);
         remember.setAccessible(true);

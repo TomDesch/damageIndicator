@@ -24,6 +24,8 @@ import java.util.Objects;
 import java.util.Set;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
+import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
@@ -33,6 +35,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -45,6 +49,9 @@ public class HealthBarListener implements Listener {
     private static final int MIN_SECONDS = 1;
     private static final int MAX_SECONDS = 10;
     private static final int MAX_HEALTH_BAR_LENGTH = 100;
+    private static final NamespacedKey ORIGINAL_NAME_MARKER_KEY = new NamespacedKey("damageindicator", "health-name-overridden");
+    private static final NamespacedKey ORIGINAL_NAME_KEY = new NamespacedKey("damageindicator", "health-original-name");
+    private static final NamespacedKey ORIGINAL_NAME_VISIBLE_KEY = new NamespacedKey("damageindicator", "health-original-visible");
 
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
@@ -188,18 +195,24 @@ public class HealthBarListener implements Listener {
 
     private void resetEntityName(LivingEntity entity) {
         OriginalNameState originalName = originalEntityNames.remove(entity);
-        if (originalName != null) {
-            entity.setCustomName(TEXT_UTIL.serializeComponent(originalName.name()));
-            entity.setCustomNameVisible(originalName.visible());
-        } else {
-            entity.setCustomName(null);
-            entity.setCustomNameVisible(false);
+        if (originalName == null) {
+            originalName = readPersistedOriginalName(entity);
         }
+        if (originalName == null) {
+            return;
+        }
+
+        entity.setCustomName(TEXT_UTIL.serializeComponent(originalName.name()));
+        entity.setCustomNameVisible(originalName.visible());
+        clearPersistedOriginalName(entity);
     }
 
     private void rememberOriginalName(LivingEntity entity) {
         String customName = entity.getCustomName();
-        originalEntityNames.putIfAbsent(entity, new OriginalNameState(TEXT_UTIL.deserializeComponent(customName), entity.isCustomNameVisible()));
+        OriginalNameState originalName = new OriginalNameState(TEXT_UTIL.deserializeComponent(customName), entity.isCustomNameVisible());
+        if (originalEntityNames.putIfAbsent(entity, originalName) == null) {
+            persistOriginalName(entity, originalName);
+        }
     }
 
     public void shutdown() {
@@ -219,6 +232,51 @@ public class HealthBarListener implements Listener {
 
         new ArrayList<>(entitiesWithActiveHologramBars.keySet()).forEach(entity -> HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars));
         new ArrayList<>(originalEntityNames.keySet()).forEach(this::resetEntityName);
+    }
+
+    public void restorePersistedNames() {
+        Bukkit.getWorlds()
+              .stream()
+              .flatMap(world -> java.util.Arrays.stream(world.getLoadedChunks()))
+              .flatMap(chunk -> java.util.Arrays.stream(chunk.getEntities()))
+              .filter(LivingEntity.class::isInstance)
+              .map(LivingEntity.class::cast)
+              .filter(this::hasPersistedOriginalName)
+              .forEach(this::resetEntityName);
+    }
+
+    private void persistOriginalName(LivingEntity entity, OriginalNameState originalName) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        data.set(ORIGINAL_NAME_MARKER_KEY, PersistentDataType.BOOLEAN, true);
+        data.set(ORIGINAL_NAME_VISIBLE_KEY, PersistentDataType.BOOLEAN, originalName.visible());
+        if (originalName.name() == null) {
+            data.remove(ORIGINAL_NAME_KEY);
+        } else {
+            data.set(ORIGINAL_NAME_KEY, PersistentDataType.STRING, TEXT_UTIL.serializeComponent(originalName.name()));
+        }
+    }
+
+    private OriginalNameState readPersistedOriginalName(LivingEntity entity) {
+        if (!hasPersistedOriginalName(entity)) {
+            return null;
+        }
+
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        String name = data.get(ORIGINAL_NAME_KEY, PersistentDataType.STRING);
+        boolean visible = Boolean.TRUE.equals(data.get(ORIGINAL_NAME_VISIBLE_KEY, PersistentDataType.BOOLEAN));
+        return new OriginalNameState(TEXT_UTIL.deserializeComponent(name), visible);
+    }
+
+    private boolean hasPersistedOriginalName(LivingEntity entity) {
+        return Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                        .get(ORIGINAL_NAME_MARKER_KEY, PersistentDataType.BOOLEAN));
+    }
+
+    private void clearPersistedOriginalName(LivingEntity entity) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        data.remove(ORIGINAL_NAME_MARKER_KEY);
+        data.remove(ORIGINAL_NAME_KEY);
+        data.remove(ORIGINAL_NAME_VISIBLE_KEY);
     }
 
     record OriginalNameState(Component name, boolean visible) {

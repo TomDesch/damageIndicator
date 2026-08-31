@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
@@ -22,6 +23,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -30,6 +32,7 @@ import org.bukkit.scheduler.BukkitTask;
  */
 public class CustomNameListener implements Listener {
 
+    private static final NamespacedKey HIDDEN_CUSTOM_NAME_KEY = new NamespacedKey("damageindicator", "custom-name-hidden");
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHolographicCustomNames = new HashMap<>();
 
     /**
@@ -76,6 +79,8 @@ public class CustomNameListener implements Listener {
         }
 
         if (entity.isCustomNameVisible() && entity.getCustomName() != null && isEnabled()) {
+            entity.getPersistentDataContainer()
+                  .set(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN, true);
             entity.setCustomNameVisible(false);
             LivingEntityTaskInfo taskInfo = spawnHologram(entity, TEXT_UTIL.deserializeComponent(entity.getCustomName()));
             entitiesWithActiveHolographicCustomNames.put(entity, taskInfo);
@@ -131,6 +136,8 @@ public class CustomNameListener implements Listener {
         if (entity.isValid() && entity.getCustomName() != null) {
             entity.setCustomNameVisible(true);
         }
+        entity.getPersistentDataContainer()
+              .remove(HIDDEN_CUSTOM_NAME_KEY);
     }
 
     private boolean isEnabled() {
@@ -156,5 +163,17 @@ public class CustomNameListener implements Listener {
               .filter(LivingEntity.class::isInstance)
               .map(LivingEntity.class::cast)
               .forEach(this::replaceWithHologramIfNeeded);
+    }
+
+    public void restorePersistedNames() {
+        Bukkit.getWorlds()
+              .stream()
+              .flatMap(world -> Arrays.stream(world.getLoadedChunks()))
+              .flatMap(chunk -> Arrays.stream(chunk.getEntities()))
+              .filter(LivingEntity.class::isInstance)
+              .map(LivingEntity.class::cast)
+              .filter(entity -> Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                                            .get(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN)))
+              .forEach(this::restoreCustomNameVisibility);
     }
 }
