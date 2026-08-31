@@ -17,7 +17,11 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 public enum TextUtil {
     TEXT_UTIL;
 
-    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
+    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.builder()
+                                                                                                 .character(LegacyComponentSerializer.SECTION_CHAR)
+                                                                                                 .hexColors()
+                                                                                                 .useUnusualXRepeatedCharacterHexFormat()
+                                                                                                 .build();
     private static final Map<String, TextDecoration> FORMAT_CODE_STYLES = Map.of("b", TextDecoration.BOLD, "s", TextDecoration.STRIKETHROUGH, "u", TextDecoration.UNDERLINED, "i", TextDecoration.ITALIC, "o", TextDecoration.OBFUSCATED);
 
     // Now allows optional whitespace inside the RGB tuple

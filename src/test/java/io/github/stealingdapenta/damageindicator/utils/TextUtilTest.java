@@ -226,6 +226,13 @@ class TextUtilTest {
         assertThrows(IllegalArgumentException.class, () -> TEXT_UTIL.repeatTextWithStyles(originalComponent, times));
     }
 
+    @Test
+    void serializeComponent_PreservesRgbColor() {
+        Component component = Component.text("RGB", TextColor.color(0x12, 0x34, 0x56));
+
+        assertEquals("§x§1§2§3§4§5§6RGB", TEXT_UTIL.serializeComponent(component));
+    }
+
     private Style resetStyle() {
         return Style.style()
                     .color(NamedTextColor.WHITE)
