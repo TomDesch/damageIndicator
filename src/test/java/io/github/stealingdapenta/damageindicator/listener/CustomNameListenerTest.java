@@ -188,4 +188,12 @@ class CustomNameListenerTest {
         verify(listenerSpy).restoreCustomNameVisibility(entity);
         verify(listenerSpy).replaceWithHologramIfNeeded(entity);
     }
+
+    @Test
+    void isArmorStandInvalid_DetectsExternallyRemovedHologram() {
+        ArmorStand armorStand = mock(ArmorStand.class);
+        when(armorStand.isValid()).thenReturn(false);
+
+        assertEquals(true, listener.isArmorStandInvalid(armorStand));
+    }
 }

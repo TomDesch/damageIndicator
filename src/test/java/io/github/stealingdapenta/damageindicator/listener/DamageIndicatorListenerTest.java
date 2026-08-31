@@ -29,6 +29,9 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -233,5 +236,12 @@ class DamageIndicatorListenerTest {
         }
 
         verify(listenerSpy).maybeRemoveArmorStandIfTagged(entity);
+    }
+
+    @Test
+    void chunkCleanup_RunsBeforeHologramsCanBeRecreated() throws Exception {
+        Method method = DamageIndicatorListener.class.getDeclaredMethod("removeStuckArmorStands", ChunkLoadEvent.class);
+
+        assertEquals(EventPriority.LOWEST, method.getAnnotation(EventHandler.class).priority());
     }
 }

@@ -118,14 +118,12 @@ public class CustomNameListener implements Listener {
             public void run() {
                 if (!entity.isValid() || !entity.getLocation()
                                                 .getChunk()
-                                                .isEntitiesLoaded()) {
+                                                .isEntitiesLoaded() || isArmorStandInvalid(armorStand)) {
                     cancel();
                     return;
                 }
 
-                if (armorStand.isValid()) {
-                    armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()));
-                }
+                armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()));
             }
         }.runTaskTimer(DamageIndicator.getInstance(), 2, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
 
@@ -138,6 +136,10 @@ public class CustomNameListener implements Listener {
         }
         entity.getPersistentDataContainer()
               .remove(HIDDEN_CUSTOM_NAME_KEY);
+    }
+
+    boolean isArmorStandInvalid(ArmorStand armorStand) {
+        return !armorStand.isValid();
     }
 
     private boolean isEnabled() {

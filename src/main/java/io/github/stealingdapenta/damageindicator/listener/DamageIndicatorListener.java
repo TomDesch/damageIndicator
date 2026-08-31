@@ -50,7 +50,7 @@ public class DamageIndicatorListener implements Listener {
     /**
      * On chunk load, removes any armor stands left over from animation tasks (e.g. after crashes) by checking for a plugin-specific tag.
      */
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void removeStuckArmorStands(ChunkLoadEvent event) {
         Arrays.stream(event.getChunk()
                            .getEntities())
