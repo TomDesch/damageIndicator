@@ -30,7 +30,6 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -123,36 +122,6 @@ public class HealthBarListener implements Listener {
         pendingHealTasks.add(pendingTask);
     }
 
-
-    /**
-     * Restores the attacker's name after they kill another entity.
-     */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
-        if (!ENABLE_HEALTH_BAR.asBoolean()) {
-            return;
-        }
-
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-            return;
-        }
-
-        if (!(event.getEntity() instanceof LivingEntity victim) || !(event.getDamager() instanceof LivingEntity killer) || !isLethalHit(event, victim)) {
-            return;
-        }
-
-        BukkitTask existingTask = entitiesWithActiveHealthBars.get(killer);
-        if (existingTask != null && !existingTask.isCancelled()) {
-            existingTask.cancel();
-        }
-
-        entitiesWithActiveHealthBars.remove(killer);
-        resetEntityName(killer);
-    }
-
-    private boolean isLethalHit(EntityDamageByEntityEvent event, LivingEntity victim) {
-        return event.getFinalDamage() >= victim.getHealth();
-    }
 
     /**
      * Handles entity death to clear health bars or restore names.

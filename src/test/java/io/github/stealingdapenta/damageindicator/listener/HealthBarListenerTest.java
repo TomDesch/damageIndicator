@@ -1,16 +1,19 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
@@ -64,21 +67,6 @@ class HealthBarListenerTest {
     }
 
     @Test
-    void isLethalHit_RequiresDamageToReachCurrentHealth() throws Exception {
-        HealthBarListener listener = new HealthBarListener();
-        LivingEntity victim = mock(LivingEntity.class);
-        EntityDamageByEntityEvent event = mock(EntityDamageByEntityEvent.class);
-        when(victim.getHealth()).thenReturn(10.0);
-        when(event.getFinalDamage()).thenReturn(9.5, 10.0);
-
-        Method method = HealthBarListener.class.getDeclaredMethod("isLethalHit", EntityDamageByEntityEvent.class, LivingEntity.class);
-        method.setAccessible(true);
-
-        assertEquals(false, method.invoke(listener, event, victim));
-        assertEquals(true, method.invoke(listener, event, victim));
-    }
-
-    @Test
     @SuppressWarnings("unchecked")
     void shutdown_CancelsTasksAndRestoresOriginalNames() throws Exception {
         HealthBarListener listener = new HealthBarListener();
@@ -103,5 +91,15 @@ class HealthBarListenerTest {
         verify(task).cancel();
         verify(pendingTask).cancel();
         verify(entity).setCustomName("Original");
+    }
+
+    @Test
+    void attackerNamesAreNotResetFromPreDeathDamageEvents() {
+        boolean hasDamageByEntityHandler = Arrays.stream(HealthBarListener.class.getDeclaredMethods())
+                                                 .filter(method -> method.isAnnotationPresent(EventHandler.class))
+                                                 .flatMap(method -> Arrays.stream(method.getParameterTypes()))
+                                                 .anyMatch(EntityDamageByEntityEvent.class::equals);
+
+        assertFalse(hasDamageByEntityHandler);
     }
 }
