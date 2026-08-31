@@ -51,7 +51,7 @@
     <dependency>
       <groupId>org.spigotmc</groupId>
       <artifactId>spigot-api</artifactId>
-      <version>1.21.10-R0.1-SNAPSHOT</version>
+      <version>${spigot-api.version}</version>
       <scope>provided</scope>
     </dependency>
 
@@ -104,6 +104,7 @@
 
   <properties>
     <java.version>21</java.version>
+    <spigot-api.version>26.2-R0.1-SNAPSHOT</spigot-api.version>
     <mockito.version>5.17.0</mockito.version>
     <byte-buddy.version>1.18.7</byte-buddy.version>
     <adventure.version>4.25.0</adventure.version>

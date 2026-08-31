@@ -2,7 +2,7 @@
 
 > Hit a mob in any way — experience the magic.
 
-![SpigotMC](https://img.shields.io/badge/Spigot-1.21-blue?style=flat-square)
+![SpigotMC](https://img.shields.io/badge/Spigot-26.2-blue?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)
 

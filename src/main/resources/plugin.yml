@@ -2,7 +2,7 @@ name: DamageIndicator
 version: 2.1.0
 main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
-api-version: 1.21
+api-version: '26.2'
 
 description: >
   The best Damage Indicator in the game! 
