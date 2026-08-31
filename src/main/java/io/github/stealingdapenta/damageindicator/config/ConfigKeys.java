@@ -3,6 +3,7 @@ package io.github.stealingdapenta.damageindicator.config;
 import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import java.util.List;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -40,7 +41,7 @@ public enum ConfigKeys {
     FLY_INTO_WALL("&(128,128,128)"),
     HOT_FLOOR("&(200,90,25)"),
     CRAMMING("&(0,128,0)"),
-    DRY_OUT("&(244,164,96)"),
+    DRY_OUT("&(244,164,96)", "dryout"),
     FREEZE("&(173,216,230)"),
     SONIC_BOOM("&(255,215,0)"),
     OTHER("&(130,130,30)"),
@@ -64,20 +65,30 @@ public enum ConfigKeys {
     HOLOGRAM_GRAVITY("0.01");
 
     private final String defaultValue;
+    private final List<String> legacyKeys;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
     private static final String RANGE_ERROR = "Value in the config file for %s must be at least %s. Using the default value.";
 
-    ConfigKeys(String defaultValue) {
+    ConfigKeys(String defaultValue, String... legacyKeys) {
         this.defaultValue = defaultValue;
+        this.legacyKeys = List.of(legacyKeys);
     }
 
     public String getDefaultValue() {
         return defaultValue;
     }
 
+    public String getConfigKey() {
+        return name().toLowerCase();
+    }
+
+    public List<String> getLegacyKeys() {
+        return legacyKeys;
+    }
+
     public String asString() {
         String value = getPlugin().getConfig()
-                                  .getString(name().toLowerCase());
+                                  .getString(getConfigKey());
         return (value != null) ? value : defaultValue;
     }
 
@@ -89,7 +100,7 @@ public enum ConfigKeys {
         try {
             return Integer.parseInt(asString());
         } catch (NumberFormatException ex) {
-            logParseWarning(name().toLowerCase());
+            logParseWarning(getConfigKey());
             return Integer.parseInt(defaultValue);
         }
     }
@@ -112,7 +123,7 @@ public enum ConfigKeys {
             }
             return value;
         } catch (NumberFormatException ex) {
-            logParseWarning(name().toLowerCase());
+            logParseWarning(getConfigKey());
             return Double.parseDouble(defaultValue);
         }
     }
@@ -142,7 +153,7 @@ public enum ConfigKeys {
 
     private void logRangeWarning(Number minimum) {
         getPlugin().getLogger()
-                   .warning(RANGE_ERROR.formatted(name().toLowerCase(), minimum));
+                   .warning(RANGE_ERROR.formatted(getConfigKey(), minimum));
     }
 
     private JavaPlugin getPlugin() {

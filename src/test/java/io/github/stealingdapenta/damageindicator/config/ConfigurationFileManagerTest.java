@@ -76,6 +76,24 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
+    void loadConfig_migratesLegacyDryoutColor() {
+        when(mockConfig.isSet("dry_out")).thenReturn(false);
+        when(mockConfig.isSet("dryout")).thenReturn(true);
+        when(mockConfig.get("dryout")).thenReturn("&(1,2,3)");
+        FileConfigurationOptions optionsStub = mock(FileConfigurationOptions.class);
+        when(mockConfig.options()).thenReturn(optionsStub);
+
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
+
+            CONFIGURATION_FILE_MANAGER.loadConfig();
+
+            verify(mockConfig).set("dry_out", "&(1,2,3)");
+        }
+    }
+
+    @Test
     void loadConfig_void_copiesDefaultsAndSavesConfig() {
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)

@@ -17,13 +17,25 @@ public enum ConfigurationFileManager {
         FileConfiguration config = plugin.getConfig();
 
         for (ConfigKeys key : ConfigKeys.values()) {
-            config.addDefault(key.name()
-                                 .toLowerCase(), key.getDefaultValue());
+            migrateLegacyValue(config, key);
+            config.addDefault(key.getConfigKey(), key.getDefaultValue());
         }
 
         config.options()
               .copyDefaults(true);
         plugin.saveConfig();
+    }
+
+    private void migrateLegacyValue(FileConfiguration config, ConfigKeys key) {
+        if (config.isSet(key.getConfigKey())) {
+            return;
+        }
+
+        key.getLegacyKeys()
+           .stream()
+           .filter(config::isSet)
+           .findFirst()
+           .ifPresent(legacyKey -> config.set(key.getConfigKey(), config.get(legacyKey)));
     }
 
     /**
