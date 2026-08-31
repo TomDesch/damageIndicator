@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import org.bukkit.Bukkit;
@@ -56,7 +57,7 @@ public class HealthBarListener implements Listener {
 
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
-    private final Map<LivingEntity, OriginalNameState> originalEntityNames = new HashMap<>();
+    private final Map<UUID, OriginalNameState> originalEntityNames = new HashMap<>();
     private final Set<BukkitTask> pendingHealTasks = new HashSet<>();
 
     /**
@@ -148,6 +149,7 @@ public class HealthBarListener implements Listener {
                         .filter(LivingEntity.class::isInstance)
                         .map(LivingEntity.class::cast)
                         .filter(this::hasPersistedOriginalName)
+                        .filter(entity -> !originalEntityNames.containsKey(entity.getUniqueId()))
                         .forEach(this::resetEntityName);
     }
 
@@ -205,7 +207,7 @@ public class HealthBarListener implements Listener {
     }
 
     void resetEntityName(LivingEntity entity) {
-        OriginalNameState originalName = originalEntityNames.remove(entity);
+        OriginalNameState originalName = originalEntityNames.remove(entity.getUniqueId());
         if (originalName == null) {
             originalName = readPersistedOriginalName(entity);
         }
@@ -224,7 +226,7 @@ public class HealthBarListener implements Listener {
             originalName = new OriginalNameState(TEXT_UTIL.deserializeComponent(entity.getCustomName()), entity.isCustomNameVisible());
             persistOriginalName(entity, originalName);
         }
-        originalEntityNames.putIfAbsent(entity, originalName);
+        originalEntityNames.putIfAbsent(entity.getUniqueId(), originalName);
     }
 
     public void shutdown() {
@@ -243,7 +245,8 @@ public class HealthBarListener implements Listener {
         entitiesWithActiveHealthBars.clear();
 
         new ArrayList<>(entitiesWithActiveHologramBars.keySet()).forEach(entity -> HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars));
-        new ArrayList<>(originalEntityNames.keySet()).forEach(this::resetEntityName);
+        restorePersistedNames();
+        originalEntityNames.clear();
     }
 
     public void restorePersistedNames() {
