@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -212,5 +214,24 @@ class HealthBarListenerTest {
 
         verify(loadedEntity).setCustomName("Original");
         verify(staleTask).cancel();
+    }
+
+    @Test
+    void restoreNamesOnChunkLoad_RecreatesPersistedAlwaysVisibleHologram() {
+        HealthBarListener listenerSpy = spy(new HealthBarListener());
+        LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
+        Chunk chunk = mock(Chunk.class);
+        ChunkLoadEvent event = mock(ChunkLoadEvent.class);
+        when(event.getChunk()).thenReturn(chunk);
+        when(chunk.getEntities()).thenReturn(new org.bukkit.entity.Entity[]{entity});
+        when(entity.getPersistentDataContainer()).thenReturn(data);
+        when(data.get(any(NamespacedKey.class), eq(PersistentDataType.BOOLEAN)))
+            .thenAnswer(invocation -> ((NamespacedKey) invocation.getArgument(0)).getKey().equals("always-visible-health-hologram"));
+        doNothing().when(listenerSpy).restorePersistedHologram(entity);
+
+        listenerSpy.restoreNamesOnChunkLoad(event);
+
+        verify(listenerSpy).restorePersistedHologram(entity);
     }
 }

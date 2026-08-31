@@ -54,6 +54,7 @@ public class HealthBarListener implements Listener {
     private static final NamespacedKey ORIGINAL_NAME_MARKER_KEY = new NamespacedKey("damageindicator", "health-name-overridden");
     private static final NamespacedKey ORIGINAL_NAME_KEY = new NamespacedKey("damageindicator", "health-original-name");
     private static final NamespacedKey ORIGINAL_NAME_VISIBLE_KEY = new NamespacedKey("damageindicator", "health-original-visible");
+    private static final NamespacedKey ALWAYS_VISIBLE_HOLOGRAM_KEY = new NamespacedKey("damageindicator", "always-visible-health-hologram");
 
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
@@ -144,21 +145,35 @@ public class HealthBarListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW)
     public void restoreNamesOnChunkLoad(ChunkLoadEvent event) {
-        java.util.Arrays.stream(event.getChunk()
-                                    .getEntities())
+        LivingEntity[] entities = java.util.Arrays.stream(event.getChunk()
+                                                               .getEntities())
                         .filter(LivingEntity.class::isInstance)
                         .map(LivingEntity.class::cast)
+                        .toArray(LivingEntity[]::new);
+        java.util.Arrays.stream(entities)
                         .filter(this::hasPersistedOriginalName)
                         .forEach(this::recoverNameOnChunkLoad);
+        java.util.Arrays.stream(entities)
+                        .filter(this::hasPersistedAlwaysVisibleHologram)
+                        .forEach(this::restorePersistedHologram);
     }
 
     private void displayHolographicHealthBar(LivingEntity entity, Component name) {
+        if (HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
+            entity.getPersistentDataContainer()
+                  .set(ALWAYS_VISIBLE_HOLOGRAM_KEY, PersistentDataType.BOOLEAN, true);
+        } else {
+            entity.getPersistentDataContainer()
+                  .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
+        }
         HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars);
         LivingEntityTaskInfo taskInfo = spawnHologramBar(entity, name);
         entitiesWithActiveHologramBars.put(entity, taskInfo);
     }
 
     private void displayCustomNameHealthBar(LivingEntity entity, Component name) {
+        entity.getPersistentDataContainer()
+              .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
         BukkitTask oldTask = entitiesWithActiveHealthBars.remove(entity);
         if (oldTask != null && !oldTask.isCancelled()) {
             oldTask.cancel();
@@ -185,6 +200,9 @@ public class HealthBarListener implements Listener {
     }
 
     private void removeHologramsUponDeath(EntityDeathEvent event) {
+        event.getEntity()
+             .getPersistentDataContainer()
+             .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
         HOLOGRAPH_UTIL.cancelHologramFor(event.getEntity(), entitiesWithActiveHologramBars);
     }
 
@@ -279,6 +297,34 @@ public class HealthBarListener implements Listener {
               .map(LivingEntity.class::cast)
               .filter(this::hasPersistedOriginalName)
               .forEach(this::resetEntityName);
+    }
+
+    public void refreshPersistedHolograms() {
+        Bukkit.getWorlds()
+              .stream()
+              .flatMap(world -> java.util.Arrays.stream(world.getLoadedChunks()))
+              .flatMap(chunk -> java.util.Arrays.stream(chunk.getEntities()))
+              .filter(LivingEntity.class::isInstance)
+              .map(LivingEntity.class::cast)
+              .filter(this::hasPersistedAlwaysVisibleHologram)
+              .forEach(this::restorePersistedHologram);
+    }
+
+    void restorePersistedHologram(LivingEntity entity) {
+        if (!ENABLE_HEALTH_BAR.asBoolean() || !ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean() || !HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
+            entity.getPersistentDataContainer()
+                  .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
+            return;
+        }
+
+        double maxHealth = Objects.requireNonNull(entity.getAttribute(Attribute.MAX_HEALTH))
+                                  .getValue();
+        displayHolographicHealthBar(entity, createHealthBar(Math.min(entity.getHealth(), maxHealth), maxHealth));
+    }
+
+    private boolean hasPersistedAlwaysVisibleHologram(LivingEntity entity) {
+        return Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                        .get(ALWAYS_VISIBLE_HOLOGRAM_KEY, PersistentDataType.BOOLEAN));
     }
 
     private void persistOriginalName(LivingEntity entity, OriginalNameState originalName) {

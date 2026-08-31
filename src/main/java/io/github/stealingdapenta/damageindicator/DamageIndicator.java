@@ -47,6 +47,7 @@ public class DamageIndicator extends JavaPlugin {
         healthBarListener.restorePersistedNames();
         customNamesListener.restorePersistedNames();
         damageIndicatorListener.cleanupLoadedChunks();
+        healthBarListener.refreshPersistedHolograms();
         customNamesListener.refreshLoadedEntities();
 
         getLogger().info("Damage Indicator plugin enabled.");
@@ -58,6 +59,7 @@ public class DamageIndicator extends JavaPlugin {
         damageIndicatorListener.shutdown();
         CONFIGURATION_FILE_MANAGER.reloadConfig();
         logFeatureStates();
+        healthBarListener.refreshPersistedHolograms();
         customNamesListener.refreshLoadedEntities();
     }
 
