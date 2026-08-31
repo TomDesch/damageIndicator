@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.Set;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -83,11 +84,16 @@ class HealthBarListenerTest {
         HealthBarListener listener = new HealthBarListener();
         LivingEntity entity = mock(LivingEntity.class);
         BukkitTask task = mock(BukkitTask.class);
+        BukkitTask pendingTask = mock(BukkitTask.class);
         when(task.isCancelled()).thenReturn(false);
+        when(pendingTask.isCancelled()).thenReturn(false);
 
         Field tasksField = HealthBarListener.class.getDeclaredField("entitiesWithActiveHealthBars");
         tasksField.setAccessible(true);
         ((Map<LivingEntity, BukkitTask>) tasksField.get(listener)).put(entity, task);
+        Field pendingField = HealthBarListener.class.getDeclaredField("pendingHealTasks");
+        pendingField.setAccessible(true);
+        ((Set<BukkitTask>) pendingField.get(listener)).add(pendingTask);
         Field namesField = HealthBarListener.class.getDeclaredField("originalEntityNames");
         namesField.setAccessible(true);
         ((Map<LivingEntity, Component>) namesField.get(listener)).put(entity, Component.text("Original"));
@@ -95,6 +101,7 @@ class HealthBarListenerTest {
         listener.shutdown();
 
         verify(task).cancel();
+        verify(pendingTask).cancel();
         verify(entity).setCustomName("Original");
     }
 }

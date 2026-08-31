@@ -3,8 +3,11 @@ package io.github.stealingdapenta.damageindicator.listener;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,7 +15,12 @@ import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.List;
+import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.World;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -22,6 +30,7 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 class CustomNameListenerTest {
 
@@ -127,5 +136,31 @@ class CustomNameListenerTest {
         verify(task).cancel();
         verify(armorStand).remove();
         assertEquals(0, active.size());
+    }
+
+    @Test
+    void refreshLoadedEntities_ProcessesEntitiesInAlreadyLoadedChunks() {
+        CustomNameListener listenerSpy = spy(listener);
+        DamageIndicator plugin = mock(DamageIndicator.class);
+        FileConfiguration config = mock(FileConfiguration.class);
+        World world = mock(World.class);
+        Chunk chunk = mock(Chunk.class);
+        LivingEntity entity = mock(LivingEntity.class);
+        when(plugin.getConfig()).thenReturn(config);
+        when(config.getString("enable_holographic_custom_names")).thenReturn("true");
+        when(config.getString("enable_hologram_health_bar")).thenReturn("true");
+        when(world.getLoadedChunks()).thenReturn(new Chunk[]{chunk});
+        when(chunk.getEntities()).thenReturn(new Entity[]{entity});
+        doNothing().when(listenerSpy).replaceWithHologramIfNeeded(entity);
+
+        try (MockedStatic<DamageIndicator> pluginStatic = mockStatic(DamageIndicator.class);
+             MockedStatic<Bukkit> bukkitStatic = mockStatic(Bukkit.class)) {
+            pluginStatic.when(DamageIndicator::getInstance).thenReturn(plugin);
+            bukkitStatic.when(Bukkit::getWorlds).thenReturn(List.of(world));
+
+            listenerSpy.refreshLoadedEntities();
+        }
+
+        verify(listenerSpy).replaceWithHologramIfNeeded(entity);
     }
 }

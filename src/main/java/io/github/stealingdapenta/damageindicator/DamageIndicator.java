@@ -54,6 +54,7 @@ public class DamageIndicator extends JavaPlugin {
         damageIndicatorListener.shutdown();
         CONFIGURATION_FILE_MANAGER.reloadConfig();
         logFeatureStates();
+        customNamesListener.refreshLoadedEntities();
     }
 
     private void logFeatureStates() {

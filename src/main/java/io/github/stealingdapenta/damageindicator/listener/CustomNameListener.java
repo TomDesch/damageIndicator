@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
@@ -66,7 +67,7 @@ public class CustomNameListener implements Listener {
      *
      * @param entity the living entity to check
      */
-    private void replaceWithHologramIfNeeded(LivingEntity entity) {
+    void replaceWithHologramIfNeeded(LivingEntity entity) {
         if (entity.hasMetadata("NPC") || entity instanceof ArmorStand) {
             return;
         }
@@ -141,5 +142,19 @@ public class CustomNameListener implements Listener {
             restoreCustomNameVisibility(entity);
             HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHolographicCustomNames);
         });
+    }
+
+    public void refreshLoadedEntities() {
+        if (!isEnabled()) {
+            return;
+        }
+
+        Bukkit.getWorlds()
+              .stream()
+              .flatMap(world -> Arrays.stream(world.getLoadedChunks()))
+              .flatMap(chunk -> Arrays.stream(chunk.getEntities()))
+              .filter(LivingEntity.class::isInstance)
+              .map(LivingEntity.class::cast)
+              .forEach(this::replaceWithHologramIfNeeded);
     }
 }

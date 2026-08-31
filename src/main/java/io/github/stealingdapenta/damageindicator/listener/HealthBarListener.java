@@ -18,8 +18,10 @@ import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import org.bukkit.attribute.Attribute;
@@ -47,6 +49,7 @@ public class HealthBarListener implements Listener {
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
     private final Map<LivingEntity, Component> originalEntityNames = new HashMap<>();
+    private final Set<BukkitTask> pendingHealTasks = new HashSet<>();
 
     /**
      * Displays the health bar after an entity takes damage.
@@ -93,24 +96,31 @@ public class HealthBarListener implements Listener {
         }
 
         // Defer one tick so the healing is fully applied before we read health.
-        DamageIndicator.getInstance()
-                       .getServer()
-                       .getScheduler()
-                       .runTask(DamageIndicator.getInstance(), () -> {
-                           if (!livingEntity.isValid()) {
-                               return;
-                           }
-                           double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
-                                                     .getValue();
-                           double currentHealth = Math.min(livingEntity.getHealth(), maxHealth);
-                           Component name = createHealthBar(currentHealth, maxHealth);
+        BukkitTask[] taskHolder = new BukkitTask[1];
+        BukkitTask pendingTask = DamageIndicator.getInstance()
+                                                .getServer()
+                                                .getScheduler()
+                                                .runTask(DamageIndicator.getInstance(), () -> {
+                                                    try {
+                                                        if (!ENABLE_HEALTH_BAR.asBoolean() || !livingEntity.isValid()) {
+                                                            return;
+                                                        }
+                                                        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
+                                                                                  .getValue();
+                                                        double currentHealth = Math.min(livingEntity.getHealth(), maxHealth);
+                                                        Component name = createHealthBar(currentHealth, maxHealth);
 
-                           if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-                               displayHolographicHealthBar(livingEntity, name);
-                           } else {
-                               displayCustomNameHealthBar(livingEntity, name);
-                           }
-                       });
+                                                        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+                                                            displayHolographicHealthBar(livingEntity, name);
+                                                        } else {
+                                                            displayCustomNameHealthBar(livingEntity, name);
+                                                        }
+                                                    } finally {
+                                                        pendingHealTasks.remove(taskHolder[0]);
+                                                    }
+                                                });
+        taskHolder[0] = pendingTask;
+        pendingHealTasks.add(pendingTask);
     }
 
 
@@ -225,6 +235,13 @@ public class HealthBarListener implements Listener {
     }
 
     public void shutdown() {
+        new ArrayList<>(pendingHealTasks).forEach(task -> {
+            if (!task.isCancelled()) {
+                task.cancel();
+            }
+        });
+        pendingHealTasks.clear();
+
         new ArrayList<>(entitiesWithActiveHealthBars.values()).forEach(task -> {
             if (!task.isCancelled()) {
                 task.cancel();
