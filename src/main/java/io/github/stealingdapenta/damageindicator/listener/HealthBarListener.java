@@ -47,7 +47,7 @@ public class HealthBarListener implements Listener {
 
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
-    private final Map<LivingEntity, Component> originalEntityNames = new HashMap<>();
+    private final Map<LivingEntity, OriginalNameState> originalEntityNames = new HashMap<>();
     private final Set<BukkitTask> pendingHealTasks = new HashSet<>();
 
     /**
@@ -186,10 +186,10 @@ public class HealthBarListener implements Listener {
     }
 
     private void resetEntityName(LivingEntity entity) {
-        Component originalName = originalEntityNames.remove(entity);
+        OriginalNameState originalName = originalEntityNames.remove(entity);
         if (originalName != null) {
-            entity.setCustomName(TEXT_UTIL.serializeComponent(originalName));
-            entity.setCustomNameVisible(true);
+            entity.setCustomName(TEXT_UTIL.serializeComponent(originalName.name()));
+            entity.setCustomNameVisible(originalName.visible());
         } else {
             entity.setCustomName(null);
             entity.setCustomNameVisible(false);
@@ -199,7 +199,7 @@ public class HealthBarListener implements Listener {
     private void rememberOriginalName(LivingEntity entity) {
         String customName = entity.getCustomName();
         if (!originalEntityNames.containsKey(entity) && customName != null) {
-            originalEntityNames.put(entity, TEXT_UTIL.deserializeComponent(customName));
+            originalEntityNames.put(entity, new OriginalNameState(TEXT_UTIL.deserializeComponent(customName), entity.isCustomNameVisible()));
         }
     }
 
@@ -220,6 +220,9 @@ public class HealthBarListener implements Listener {
 
         new ArrayList<>(entitiesWithActiveHologramBars.keySet()).forEach(entity -> HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars));
         new ArrayList<>(originalEntityNames.keySet()).forEach(this::resetEntityName);
+    }
+
+    record OriginalNameState(Component name, boolean visible) {
     }
 
     private LivingEntityTaskInfo spawnHologramBar(LivingEntity entity, Component name) {

@@ -11,7 +11,6 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
-import net.kyori.adventure.text.Component;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
@@ -53,6 +52,7 @@ class HealthBarListenerTest {
         HealthBarListener listener = new HealthBarListener();
         LivingEntity entity = mock(LivingEntity.class);
         when(entity.getCustomName()).thenReturn("Original name", "Current health bar");
+        when(entity.isCustomNameVisible()).thenReturn(false);
 
         Method remember = HealthBarListener.class.getDeclaredMethod("rememberOriginalName", LivingEntity.class);
         remember.setAccessible(true);
@@ -64,6 +64,7 @@ class HealthBarListenerTest {
         reset.invoke(listener, entity);
 
         verify(entity).setCustomName("Original name");
+        verify(entity).setCustomNameVisible(false);
     }
 
     @Test
@@ -84,13 +85,15 @@ class HealthBarListenerTest {
         ((Set<BukkitTask>) pendingField.get(listener)).add(pendingTask);
         Field namesField = HealthBarListener.class.getDeclaredField("originalEntityNames");
         namesField.setAccessible(true);
-        ((Map<LivingEntity, Component>) namesField.get(listener)).put(entity, Component.text("Original"));
+        ((Map<LivingEntity, HealthBarListener.OriginalNameState>) namesField.get(listener))
+            .put(entity, new HealthBarListener.OriginalNameState(net.kyori.adventure.text.Component.text("Original"), false));
 
         listener.shutdown();
 
         verify(task).cancel();
         verify(pendingTask).cancel();
         verify(entity).setCustomName("Original");
+        verify(entity).setCustomNameVisible(false);
     }
 
     @Test
