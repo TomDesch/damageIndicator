@@ -4,6 +4,7 @@ import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.AttackerVictimPair;
 import io.github.stealingdapenta.damageindicator.utils.MergedDamageInfo;
+import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -144,7 +145,7 @@ public class DamageIndicatorListener implements Listener {
         ArmorStand armorStand = info.getArmorStand();
         if (armorStand != null && armorStand.isValid()) {
             double roundedDamage = Math.round(info.getTotalDamage() * 100.0) / 100.0;
-            armorStand.customName(Component.text(roundedDamage, info.getLatestColor()));
+            armorStand.setCustomName(TextUtil.TEXT_UTIL.serializeComponent(Component.text(roundedDamage, info.getLatestColor())));
         }
     }
 
@@ -279,7 +280,7 @@ public class DamageIndicatorListener implements Listener {
 
         return location.getWorld()
                        .spawn(location, ArmorStand.class, armorStand -> {
-                           armorStand.customName(Component.text(roundedDamage, color));
+                           armorStand.setCustomName(TextUtil.TEXT_UTIL.serializeComponent(Component.text(roundedDamage, color)));
                            armorStand.setCustomNameVisible(true);
                            armorStand.setVisible(false);
                            armorStand.setMarker(true);

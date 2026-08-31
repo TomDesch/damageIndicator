@@ -1,5 +1,7 @@
 package io.github.stealingdapenta.damageindicator.command;
 
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
+
 import io.github.stealingdapenta.damageindicator.config.Permission;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -24,20 +26,20 @@ public class AreaRenameCommand implements CommandExecutor {
         }
 
         if (!player.hasPermission(Permission.AREA_RENAME.getNode())) {
-            player.sendMessage(Component.text(NO_PERMISSION_MSG.formatted(Permission.AREA_RENAME.getNode())));
+            player.sendMessage(TEXT_UTIL.serializeComponent(Component.text(NO_PERMISSION_MSG.formatted(Permission.AREA_RENAME.getNode()))));
             return true;
         }
 
         int removedCount = 0;
         for (Entity entity : player.getNearbyEntities(RADIUS, RADIUS, RADIUS)) {
-            if (entity.customName() != null) {
-                entity.customName(null); // Renaming to null effectively removes the name
+            if (entity.getCustomName() != null) {
+                entity.setCustomName(null);
                 entity.setCustomNameVisible(false);
                 removedCount++;
             }
         }
 
-        player.sendMessage(Component.text(REMOVED_MSG.formatted(removedCount)));
+        player.sendMessage(TEXT_UTIL.serializeComponent(Component.text(REMOVED_MSG.formatted(removedCount))));
         return true;
     }
 }

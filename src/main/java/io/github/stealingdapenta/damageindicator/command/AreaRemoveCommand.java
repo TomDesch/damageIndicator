@@ -1,6 +1,7 @@
 package io.github.stealingdapenta.damageindicator.command;
 
 import static io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener.getCustomNamespacedKey;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.config.Permission;
 import net.kyori.adventure.text.Component;
@@ -27,7 +28,7 @@ public class AreaRemoveCommand implements CommandExecutor {
         }
 
         if (!player.hasPermission(Permission.AREA_REMOVE.getNode())) {
-            player.sendMessage(Component.text(NO_PERMISSION_MSG.formatted(Permission.AREA_REMOVE.getNode())));
+            player.sendMessage(TEXT_UTIL.serializeComponent(Component.text(NO_PERMISSION_MSG.formatted(Permission.AREA_REMOVE.getNode()))));
             return true;
         }
 
@@ -40,7 +41,7 @@ public class AreaRemoveCommand implements CommandExecutor {
             }
         }
 
-        player.sendMessage(Component.text(REMOVED_MSG.formatted(removedCount)));
+        player.sendMessage(TEXT_UTIL.serializeComponent(Component.text(REMOVED_MSG.formatted(removedCount))));
         return true;
     }
 }

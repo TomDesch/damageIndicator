@@ -9,6 +9,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 /**
  * Utility singleton for formatting text with Adventure components using color codes and style flags. Supports both RGB (&(R,G,B)) and decorators like &b (bold), &u (underlined), etc.
@@ -16,6 +17,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 public enum TextUtil {
     TEXT_UTIL;
 
+    private static final LegacyComponentSerializer LEGACY_SERIALIZER = LegacyComponentSerializer.legacySection();
     private static final Map<String, TextDecoration> FORMAT_CODE_STYLES = Map.of("b", TextDecoration.BOLD, "s", TextDecoration.STRIKETHROUGH, "u", TextDecoration.UNDERLINED, "i", TextDecoration.ITALIC, "o", TextDecoration.OBFUSCATED);
 
     // Now allows optional whitespace inside the RGB tuple
@@ -133,6 +135,14 @@ public enum TextUtil {
                             .content(textComponent.content()
                                                   .repeat(times))
                             .build();
+    }
+
+    public String serializeComponent(Component component) {
+        return component == null ? null : LEGACY_SERIALIZER.serialize(component);
+    }
+
+    public Component deserializeComponent(String value) {
+        return value == null ? null : LEGACY_SERIALIZER.deserialize(value);
     }
 
     private boolean isRgbPattern(String segment) {

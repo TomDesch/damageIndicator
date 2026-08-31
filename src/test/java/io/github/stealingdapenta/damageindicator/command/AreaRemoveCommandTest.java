@@ -52,13 +52,13 @@ class AreaRemoveCommandTest {
     void onCommand_withoutPermission_returnsTrueWithMessage() {
         when(mockPlayer.hasPermission(anyString())).thenReturn(false);
 
-        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
         boolean result = areaRemoveCommand.onCommand(mockPlayer, mockCommand, LABEL, new String[]{});
 
         assertTrue(result);
         verify(mockPlayer).sendMessage(captor.capture());
-        assertEquals(Component.text("You don't have the required damageindicator.arearemove to execute this command."), captor.getValue());
+        assertEquals("You don't have the required damageindicator.arearemove to execute this command.", captor.getValue());
     }
 
     @Test
@@ -78,7 +78,7 @@ class AreaRemoveCommandTest {
         when(mockDataContainer1.getOrDefault(any(), any(), anyBoolean())).thenReturn(true);
         when(mockDataContainer2.getOrDefault(any(), any(), anyBoolean())).thenReturn(true);
 
-        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
         try (MockedStatic<DamageIndicatorListener> mockedStatic = mockStatic(DamageIndicatorListener.class)) {
             mockedStatic.when(DamageIndicatorListener::getCustomNamespacedKey)
@@ -95,6 +95,6 @@ class AreaRemoveCommandTest {
         verify(mockEntity2).remove();
         verify(mockPlayer).sendMessage(captor.capture());
 
-        assertEquals(Component.text("Successfully removed 2 nearby entities."), captor.getValue());
+        assertEquals("Successfully removed 2 nearby entities.", captor.getValue());
     }
 }

@@ -18,7 +18,13 @@
   </build>
 
   <dependencies>
-    <!-- Paper API -->
+    <!-- Bukkit/Spigot API for server compatibility across Paper and Spigot builds -->
+    <dependency>
+      <groupId>org.spigotmc</groupId>
+      <artifactId>spigot-api</artifactId>
+      <version>1.21.10-R0.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>io.papermc.paper</groupId>
       <artifactId>paper-api</artifactId>
@@ -34,17 +40,23 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Mockito (for mocking in tests) -->
+    <!-- Mockito / Byte Buddy (for mocking in tests). Keep these on a Java 21+ compatible line so Mockito can instrument Bukkit event classes on modern JDKs. -->
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-      <version>5.11.0</version>
+      <version>5.17.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-inline</artifactId>
-      <version>5.2.0</version>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy</artifactId>
+      <version>1.17.5</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy-agent</artifactId>
+      <version>1.17.5</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -67,6 +79,10 @@
     <repository>
       <id>papermc-repo</id>
       <url>https://repo.papermc.io/repository/maven-public/</url>
+    </repository>
+    <repository>
+      <id>spigotmc-repo</id>
+      <url>https://hub.spigotmc.org/nexus/content/repositories/public/</url>
     </repository>
   </repositories>
 

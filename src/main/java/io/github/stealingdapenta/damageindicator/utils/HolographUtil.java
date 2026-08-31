@@ -24,7 +24,7 @@ public enum HolographUtil {
     public ArmorStand createArmorStandHologram(Location location, Component name) {
         return location.getWorld()
                        .spawn(location, ArmorStand.class, armorStand -> {
-                           armorStand.customName(name);
+                           armorStand.setCustomName(TextUtil.TEXT_UTIL.serializeComponent(name));
                            armorStand.setCustomNameVisible(true);
                            armorStand.setVisible(false);
                            armorStand.setMarker(true);

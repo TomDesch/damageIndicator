@@ -3,6 +3,7 @@ package io.github.stealingdapenta.damageindicator.listener;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_NAME_POSITION;
 import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
@@ -71,9 +72,9 @@ public class CustomNameListener implements Listener {
             return;
         }
 
-        if (entity.isCustomNameVisible() && entity.customName() != null) {
+        if (entity.isCustomNameVisible() && entity.getCustomName() != null) {
             entity.setCustomNameVisible(false);
-            LivingEntityTaskInfo taskInfo = spawnHologram(entity, entity.customName());
+            LivingEntityTaskInfo taskInfo = spawnHologram(entity, TEXT_UTIL.deserializeComponent(entity.getCustomName()));
             entitiesWithActiveHolographicCustomNames.put(entity, taskInfo);
         }
     }
@@ -106,7 +107,8 @@ public class CustomNameListener implements Listener {
 
             @Override
             public void run() {
-                if (!entity.isValid() || !entity.getChunk()
+                if (!entity.isValid() || !entity.getLocation()
+                                                .getChunk()
                                                 .isEntitiesLoaded()) {
                     cancel();
                     return;

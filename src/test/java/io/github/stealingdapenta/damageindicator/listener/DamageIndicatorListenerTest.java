@@ -113,7 +113,7 @@ class DamageIndicatorListenerTest {
 
         invokeUpdateMergedDamageDisplay(info);
 
-        verify(mockStand, times(1)).customName(any());
+        verify(mockStand, times(1)).setCustomName(any());
     }
 
     @Test
@@ -125,7 +125,7 @@ class DamageIndicatorListenerTest {
         MergedDamageInfo info = new MergedDamageInfo(10.0, color, mockStand);
 
         assertDoesNotThrow(() -> invokeUpdateMergedDamageDisplay(info));
-        verify(mockStand, never()).customName(any());
+        verify(mockStand, never()).setCustomName(any());
     }
 
     @Test

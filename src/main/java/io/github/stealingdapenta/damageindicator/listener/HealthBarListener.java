@@ -55,9 +55,9 @@ public class HealthBarListener implements Listener {
             return;
         }
 
-        double currentHealth = Math.max(0, livingEntity.getHealth() - event.getFinalDamage());
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
                                   .getValue();
+        double currentHealth = resolveDisplayHealth(livingEntity, maxHealth);
         Component name = createHealthBar(currentHealth, maxHealth);
 
         if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
@@ -150,11 +150,11 @@ public class HealthBarListener implements Listener {
             oldTask.cancel();
         }
 
-        if (entity.customName() != null) {
-            originalEntityNames.put(entity, entity.customName());
+        if (entity.getCustomName() != null) {
+            originalEntityNames.put(entity, TEXT_UTIL.deserializeComponent(entity.getCustomName()));
         }
 
-        entity.customName(name);
+        entity.setCustomName(TEXT_UTIL.serializeComponent(name));
         entity.setCustomNameVisible(true);
 
         if (!HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
@@ -194,7 +194,14 @@ public class HealthBarListener implements Listener {
     }
 
     private void resetEntityName(LivingEntity entity) {
-        entity.customName(originalEntityNames.remove(entity));
+        Component originalName = originalEntityNames.remove(entity);
+        if (originalName != null) {
+            entity.setCustomName(TEXT_UTIL.serializeComponent(originalName));
+            entity.setCustomNameVisible(true);
+        } else {
+            entity.setCustomName(null);
+            entity.setCustomNameVisible(false);
+        }
     }
 
     private LivingEntityTaskInfo spawnHologramBar(LivingEntity entity, Component name) {
@@ -230,6 +237,10 @@ public class HealthBarListener implements Listener {
     private int getDisplayDurationInTicks() {
         int seconds = HEALTH_BAR_DISPLAY_DURATION.asInt();
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(seconds, MAX_SECONDS));
+    }
+
+    private double resolveDisplayHealth(LivingEntity livingEntity, double maxHealth) {
+        return Math.min(Math.max(0.0, livingEntity.getHealth()), maxHealth);
     }
 
     private Component createHealthBar(double current, double max) {

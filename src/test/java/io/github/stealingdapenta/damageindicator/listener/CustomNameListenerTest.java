@@ -29,7 +29,7 @@ class CustomNameListenerTest {
     private LivingEntity mockLivingEntityWithCustomName() {
         LivingEntity entity = mock(LivingEntity.class);
         when(entity.isCustomNameVisible()).thenReturn(true);
-        when(entity.customName()).thenReturn(Component.text("VisibleName"));
+        when(entity.getCustomName()).thenReturn("VisibleName");
         return entity;
     }
 
@@ -53,7 +53,7 @@ class CustomNameListenerTest {
         when(event.getEntity()).thenReturn(entity);
         when(entity.hasMetadata(anyString())).thenReturn(false);
         when(entity.isCustomNameVisible()).thenReturn(true);
-        when(entity.customName()).thenReturn(null); // no name set
+        when(entity.getCustomName()).thenReturn(null); // no name set
 
         listener.onEntitySpawn(event);
 

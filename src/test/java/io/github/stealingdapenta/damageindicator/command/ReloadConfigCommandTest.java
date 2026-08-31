@@ -38,13 +38,13 @@ class ReloadConfigCommandTest {
         when(mockCommandSender.hasPermission(anyString())).thenReturn(false);
         String expectedMessage = "You don't have the required damageindicator.reload to execute this command.";
 
-        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
         boolean result = reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
 
         assertTrue(result);
         verify(mockCommandSender, times(1)).sendMessage(captor.capture());
-        assertEquals(Component.text(expectedMessage), captor.getValue());
+        assertEquals(expectedMessage, captor.getValue());
     }
 
 
@@ -63,9 +63,9 @@ class ReloadConfigCommandTest {
 
             assertTrue(result);
 
-            ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
             verify(mockCommandSender, times(1)).sendMessage(captor.capture());
-            assertEquals(Component.text(expectedMessage), captor.getValue());
+            assertEquals(expectedMessage, captor.getValue());
         }
     }
 
