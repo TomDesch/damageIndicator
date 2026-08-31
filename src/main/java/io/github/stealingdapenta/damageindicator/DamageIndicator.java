@@ -44,6 +44,7 @@ public class DamageIndicator extends JavaPlugin {
         registerListener(healthBarListener);
         registerListener(customNamesListener);
         logFeatureStates();
+        customNamesListener.refreshLoadedEntities();
 
         getLogger().info("Damage Indicator plugin enabled.");
     }
