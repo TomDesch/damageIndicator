@@ -17,6 +17,10 @@ public class AttackerVictimPair {
         this.victimId = victim.getUniqueId();
     }
 
+    public boolean involves(UUID entityId) {
+        return Objects.equals(attackerId, entityId) || Objects.equals(victimId, entityId);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -34,4 +38,3 @@ public class AttackerVictimPair {
         return Objects.hash(attackerId, victimId);
     }
 }
-

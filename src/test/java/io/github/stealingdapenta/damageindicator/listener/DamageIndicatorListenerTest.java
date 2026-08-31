@@ -147,6 +147,30 @@ class DamageIndicatorListenerTest {
         assertDoesNotThrow(() -> listener.onEntityDeath(event));
     }
 
+    @Test
+    void testOnEntityDeath_CleansOnlyDamageForInvolvedEntity() throws Exception {
+        LivingEntity attacker = mock(LivingEntity.class);
+        LivingEntity victim = mock(LivingEntity.class);
+        LivingEntity unrelated = mock(LivingEntity.class);
+        when(attacker.getUniqueId()).thenReturn(java.util.UUID.randomUUID());
+        when(victim.getUniqueId()).thenReturn(java.util.UUID.randomUUID());
+        when(unrelated.getUniqueId()).thenReturn(java.util.UUID.randomUUID());
+
+        MergedDamageInfo matchingInfo = mock(MergedDamageInfo.class);
+        MergedDamageInfo unrelatedInfo = mock(MergedDamageInfo.class);
+        Map<AttackerVictimPair, MergedDamageInfo> map = getMergedDamageMap();
+        map.put(new AttackerVictimPair(attacker, victim), matchingInfo);
+        map.put(new AttackerVictimPair(attacker, unrelated), unrelatedInfo);
+
+        EntityDeathEvent event = mock(EntityDeathEvent.class);
+        when(event.getEntity()).thenReturn(victim);
+        listener.onEntityDeath(event);
+
+        verify(matchingInfo).cleanup();
+        verify(unrelatedInfo, never()).cleanup();
+        assertEquals(1, map.size());
+    }
+
 
     @Test
     void testMergedDamageMap_IsAccessible() throws Exception {
@@ -164,4 +188,3 @@ class DamageIndicatorListenerTest {
         assertTrue(map.isEmpty());
     }
 }
-

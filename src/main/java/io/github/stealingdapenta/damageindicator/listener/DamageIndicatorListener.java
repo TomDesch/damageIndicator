@@ -245,30 +245,13 @@ public class DamageIndicatorListener implements Listener {
     public void onEntityDeath(EntityDeathEvent event) {
         LivingEntity entity = event.getEntity();
 
-        // Clean up any merged damage involving this entity
         mergedDamageMap.entrySet()
                        .removeIf(entry -> {
-                           MergedDamageInfo info = entry.getValue();
-                           boolean shouldRemove = false;
-
-                           // Check if this entity is involved (we need to compare by checking the armor stand location)
-                           ArmorStand armorStand = info.getArmorStand();
-                           if (armorStand != null && armorStand.isValid()) {
-                               Location standLoc = armorStand.getLocation();
-                               Location entityLoc = entity.getLocation();
-
-                               // If armor stand is near the dead entity, clean it up
-                               if (standLoc.getWorld()
-                                           .equals(entityLoc.getWorld()) && standLoc.distance(entityLoc) < 5.0) {
-                                   shouldRemove = true;
-                               }
+                           if (entry.getKey().involves(entity.getUniqueId())) {
+                               entry.getValue().cleanup();
+                               return true;
                            }
-
-                           if (shouldRemove) {
-                               info.cleanup();
-                           }
-
-                           return shouldRemove;
+                           return false;
                        });
     }
 

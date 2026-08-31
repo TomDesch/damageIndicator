@@ -131,5 +131,20 @@ class AttackerVictimPairTest {
         // Hash codes should be different (not guaranteed by contract, but highly likely)
         assertNotEquals(pair1.hashCode(), pair2.hashCode());
     }
-}
 
+    @Test
+    void involves_MatchesAttackerAndVictimOnly() {
+        UUID attackerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        Entity attacker = mock(Player.class);
+        Entity victim = mock(Zombie.class);
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+
+        AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
+
+        assertEquals(true, pair.involves(attackerId));
+        assertEquals(true, pair.involves(victimId));
+        assertEquals(false, pair.involves(UUID.randomUUID()));
+    }
+}
