@@ -185,4 +185,32 @@ class HealthBarListenerTest {
         verify(entity).setCustomName("Original");
         verify(entity).setCustomNameVisible(false);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void recoverNameOnChunkLoad_CancelsResetBoundToStaleEntityInstance() throws Exception {
+        HealthBarListener listener = new HealthBarListener();
+        UUID entityId = UUID.randomUUID();
+        LivingEntity staleEntity = mock(LivingEntity.class);
+        LivingEntity loadedEntity = mock(LivingEntity.class);
+        BukkitTask staleTask = mock(BukkitTask.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
+        when(staleEntity.getUniqueId()).thenReturn(entityId);
+        when(loadedEntity.getUniqueId()).thenReturn(entityId);
+        when(loadedEntity.getPersistentDataContainer()).thenReturn(data);
+        when(staleTask.isCancelled()).thenReturn(false);
+
+        Field tasksField = HealthBarListener.class.getDeclaredField("entitiesWithActiveHealthBars");
+        tasksField.setAccessible(true);
+        ((Map<LivingEntity, BukkitTask>) tasksField.get(listener)).put(staleEntity, staleTask);
+        Field namesField = HealthBarListener.class.getDeclaredField("originalEntityNames");
+        namesField.setAccessible(true);
+        ((Map<UUID, HealthBarListener.OriginalNameState>) namesField.get(listener))
+            .put(entityId, new HealthBarListener.OriginalNameState(net.kyori.adventure.text.Component.text("Original"), false));
+
+        listener.recoverNameOnChunkLoad(loadedEntity);
+
+        verify(loadedEntity).setCustomName("Original");
+        verify(staleTask).cancel();
+    }
 }

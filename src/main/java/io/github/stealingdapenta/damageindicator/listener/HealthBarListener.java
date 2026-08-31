@@ -149,8 +149,7 @@ public class HealthBarListener implements Listener {
                         .filter(LivingEntity.class::isInstance)
                         .map(LivingEntity.class::cast)
                         .filter(this::hasPersistedOriginalName)
-                        .filter(entity -> !originalEntityNames.containsKey(entity.getUniqueId()))
-                        .forEach(this::resetEntityName);
+                        .forEach(this::recoverNameOnChunkLoad);
     }
 
     private void displayHolographicHealthBar(LivingEntity entity, Component name) {
@@ -227,6 +226,28 @@ public class HealthBarListener implements Listener {
             persistOriginalName(entity, originalName);
         }
         originalEntityNames.putIfAbsent(entity.getUniqueId(), originalName);
+    }
+
+    void recoverNameOnChunkLoad(LivingEntity entity) {
+        Map.Entry<LivingEntity, BukkitTask> staleReset = entitiesWithActiveHealthBars.entrySet()
+                                                                                    .stream()
+                                                                                    .filter(entry -> entry.getKey()
+                                                                                                          .getUniqueId()
+                                                                                                          .equals(entity.getUniqueId()))
+                                                                                    .findFirst()
+                                                                                    .orElse(null);
+        if (staleReset != null) {
+            resetEntityName(entity);
+            entitiesWithActiveHealthBars.remove(staleReset.getKey());
+            if (!staleReset.getValue().isCancelled()) {
+                staleReset.getValue().cancel();
+            }
+            return;
+        }
+
+        if (!originalEntityNames.containsKey(entity.getUniqueId())) {
+            resetEntityName(entity);
+        }
     }
 
     public void shutdown() {
