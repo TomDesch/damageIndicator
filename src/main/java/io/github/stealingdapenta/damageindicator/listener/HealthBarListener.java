@@ -57,7 +57,7 @@ public class HealthBarListener implements Listener {
 
         double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
                                   .getValue();
-        double currentHealth = resolveDisplayHealth(livingEntity, maxHealth);
+        double currentHealth = resolveDisplayHealth(livingEntity, event.getFinalDamage(), maxHealth);
         Component name = createHealthBar(currentHealth, maxHealth);
 
         if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
@@ -239,8 +239,8 @@ public class HealthBarListener implements Listener {
         return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(seconds, MAX_SECONDS));
     }
 
-    private double resolveDisplayHealth(LivingEntity livingEntity, double maxHealth) {
-        return Math.min(Math.max(0.0, livingEntity.getHealth()), maxHealth);
+    private double resolveDisplayHealth(LivingEntity livingEntity, double finalDamage, double maxHealth) {
+        return Math.min(Math.max(0.0, livingEntity.getHealth() - finalDamage), maxHealth);
     }
 
     private Component createHealthBar(double current, double max) {
