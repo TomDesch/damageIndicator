@@ -78,6 +78,9 @@ public class DamageIndicatorListener implements Listener {
         if (!(entity instanceof LivingEntity livingEntity)) {
             return;
         }
+        if (!ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
+            return;
+        }
 
         double damageDealt = event.getFinalDamage();
         TextColor textColor = resolveColorForCause(event.getCause());

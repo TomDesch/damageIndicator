@@ -40,29 +40,44 @@ public class DamageIndicator extends JavaPlugin {
         registerCommand("arearemove", areaRemoveCommand);
         registerCommand("arearename", areaRenameCommand);
 
+        registerListener(damageIndicatorListener);
+        registerListener(healthBarListener);
+        registerListener(customNamesListener);
+        logFeatureStates();
+
+        getLogger().info("Damage Indicator plugin enabled.");
+    }
+
+    public void reloadConfiguration() {
+        customNamesListener.shutdown();
+        healthBarListener.shutdown();
+        damageIndicatorListener.shutdown();
+        CONFIGURATION_FILE_MANAGER.reloadConfig();
+        logFeatureStates();
+    }
+
+    private void logFeatureStates() {
         if (ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
-            registerFeature(damageIndicatorListener, "Damage indicator");
+            logEnabledFeature("Damage indicator");
         } else {
             logDisabledFeature("Damage indicator");
         }
 
         if (ConfigKeys.ENABLE_HEALTH_BAR.asBoolean()) {
-            registerFeature(healthBarListener, "Health bar");
+            logEnabledFeature("Health bar");
         } else {
             logDisabledFeature("Health bar");
         }
 
         if (ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean()) {
             if (ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-                registerFeature(customNamesListener, "Holographic custom names");
+                logEnabledFeature("Holographic custom names");
             } else {
                 getLogger().warning("Holographic custom names enabled, but holographic health bar is disabled. Enable both for expected behavior.");
             }
         } else {
             logDisabledFeature("Holographic custom names");
         }
-
-        getLogger().info("Damage Indicator plugin enabled.");
     }
 
     @Override
@@ -83,9 +98,12 @@ public class DamageIndicator extends JavaPlugin {
         command.setExecutor((org.bukkit.command.CommandExecutor) executor);
     }
 
-    private void registerFeature(Object listener, String featureName) {
+    private void registerListener(org.bukkit.event.Listener listener) {
         Bukkit.getPluginManager()
-              .registerEvents((org.bukkit.event.Listener) listener, this);
+              .registerEvents(listener, this);
+    }
+
+    private void logEnabledFeature(String featureName) {
         getLogger().info(featureName + " feature enabled.");
     }
 

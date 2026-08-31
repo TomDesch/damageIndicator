@@ -64,6 +64,7 @@ class ReloadConfigCommandTest {
             assertTrue(result);
 
             ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(mockPlugin).reloadConfiguration();
             verify(mockCommandSender, times(1)).sendMessage(captor.capture());
             assertEquals(expectedMessage, captor.getValue());
         }

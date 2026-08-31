@@ -6,6 +6,7 @@ import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLO
 import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,7 +74,7 @@ public class CustomNameListener implements Listener {
             return;
         }
 
-        if (entity.isCustomNameVisible() && entity.getCustomName() != null) {
+        if (entity.isCustomNameVisible() && entity.getCustomName() != null && isEnabled()) {
             entity.setCustomNameVisible(false);
             LivingEntityTaskInfo taskInfo = spawnHologram(entity, TEXT_UTIL.deserializeComponent(entity.getCustomName()));
             entitiesWithActiveHolographicCustomNames.put(entity, taskInfo);
@@ -129,6 +130,10 @@ public class CustomNameListener implements Listener {
         if (entity.isValid() && entity.getCustomName() != null) {
             entity.setCustomNameVisible(true);
         }
+    }
+
+    private boolean isEnabled() {
+        return ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean() && ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
     }
 
     public void shutdown() {

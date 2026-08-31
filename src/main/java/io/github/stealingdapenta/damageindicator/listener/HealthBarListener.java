@@ -1,6 +1,7 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALWAYS_VISIBLE;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DEAD_SYMBOL;
@@ -52,6 +53,10 @@ public class HealthBarListener implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
+        if (!ENABLE_HEALTH_BAR.asBoolean()) {
+            return;
+        }
+
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
             return;
         }
@@ -73,6 +78,10 @@ public class HealthBarListener implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void updateHealthBarOnHeal(EntityRegainHealthEvent event) {
+        if (!ENABLE_HEALTH_BAR.asBoolean()) {
+            return;
+        }
+
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
             return;
         }
@@ -110,6 +119,10 @@ public class HealthBarListener implements Listener {
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     private void restoreNameUponKilling(EntityDamageByEntityEvent event) {
+        if (!ENABLE_HEALTH_BAR.asBoolean()) {
+            return;
+        }
+
         if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
             return;
         }
@@ -136,11 +149,8 @@ public class HealthBarListener implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void handleDeathEvents(EntityDeathEvent event) {
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-            removeHologramsUponDeath(event);
-        } else {
-            restoreNameUponDeath(event);
-        }
+        removeHologramsUponDeath(event);
+        restoreNameUponDeath(event);
     }
 
     private void displayHolographicHealthBar(LivingEntity entity, Component name) {
