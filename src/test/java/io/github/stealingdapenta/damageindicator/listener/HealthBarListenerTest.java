@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.junit.jupiter.api.Test;
 
 class HealthBarListenerTest {
@@ -55,5 +56,20 @@ class HealthBarListenerTest {
         reset.invoke(listener, entity);
 
         verify(entity).setCustomName("Original name");
+    }
+
+    @Test
+    void isLethalHit_RequiresDamageToReachCurrentHealth() throws Exception {
+        HealthBarListener listener = new HealthBarListener();
+        LivingEntity victim = mock(LivingEntity.class);
+        EntityDamageByEntityEvent event = mock(EntityDamageByEntityEvent.class);
+        when(victim.getHealth()).thenReturn(10.0);
+        when(event.getFinalDamage()).thenReturn(9.5, 10.0);
+
+        Method method = HealthBarListener.class.getDeclaredMethod("isLethalHit", EntityDamageByEntityEvent.class, LivingEntity.class);
+        method.setAccessible(true);
+
+        assertEquals(false, method.invoke(listener, event, victim));
+        assertEquals(true, method.invoke(listener, event, victim));
     }
 }

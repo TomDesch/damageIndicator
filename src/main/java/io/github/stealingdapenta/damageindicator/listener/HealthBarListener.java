@@ -113,7 +113,7 @@ public class HealthBarListener implements Listener {
             return;
         }
 
-        if (!(event.getEntity() instanceof LivingEntity) || !(event.getDamager() instanceof LivingEntity killer)) {
+        if (!(event.getEntity() instanceof LivingEntity victim) || !(event.getDamager() instanceof LivingEntity killer) || !isLethalHit(event, victim)) {
             return;
         }
 
@@ -124,6 +124,10 @@ public class HealthBarListener implements Listener {
 
         entitiesWithActiveHealthBars.remove(killer);
         resetEntityName(killer);
+    }
+
+    private boolean isLethalHit(EntityDamageByEntityEvent event, LivingEntity victim) {
+        return event.getFinalDamage() >= victim.getHealth();
     }
 
     /**
