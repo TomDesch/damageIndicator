@@ -95,14 +95,14 @@ class ConfigKeysTest {
     }
 
     @Test
-    void asDouble_invalidString_logsWarningAndReturns0() {
+    void asDouble_invalidString_logsWarningAndReturnsDefault() {
         when(mockConfig.getString(anyString())).thenReturn("not a double");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
             double result = HOLOGRAM_FOLLOW_SPEED.asDouble();
-            assertEquals(0.0, result);
+            assertEquals(Double.parseDouble(HOLOGRAM_FOLLOW_SPEED.getDefaultValue()), result);
             verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for " + HOLOGRAM_FOLLOW_SPEED.name()
                                                                                                                                       .toLowerCase() + ".");
         }
@@ -135,16 +135,42 @@ class ConfigKeysTest {
     }
 
     @Test
-    void asInt_invalidString_logsWarningAndReturns0() {
+    void asInt_invalidString_logsWarningAndReturnsDefault() {
         when(mockConfig.getString(anyString())).thenReturn("not an integer");
 
         try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
             mockedStatic.when(DamageIndicator::getInstance)
                         .thenReturn(mockPlugin);
             int result = HOLOGRAM_FOLLOW_SPEED.asInt();
-            assertEquals(0, result);
+            assertEquals(Integer.parseInt(HOLOGRAM_FOLLOW_SPEED.getDefaultValue()), result);
             verify(mockPlugin.getLogger(), times(1)).warning("Error parsing the value in the config file for " + HOLOGRAM_FOLLOW_SPEED.name()
                                                                                                                                       .toLowerCase() + ".");
+        }
+    }
+
+    @Test
+    void asIntAtLeast_valueBelowMinimum_logsWarningAndReturnsDefault() {
+        when(mockConfig.getString(anyString())).thenReturn("0");
+
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
+
+            assertEquals(Integer.parseInt(HOLOGRAM_FOLLOW_SPEED.getDefaultValue()), HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
+            verify(mockPlugin.getLogger()).warning("Value in the config file for hologram_follow_speed must be at least 1. Using the default value.");
+        }
+    }
+
+    @Test
+    void asDouble_nonFiniteValue_logsWarningAndReturnsDefault() {
+        when(mockConfig.getString(anyString())).thenReturn("NaN");
+
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
+
+            assertEquals(Double.parseDouble(HOLOGRAM_FOLLOW_SPEED.getDefaultValue()), HOLOGRAM_FOLLOW_SPEED.asDouble());
+            verify(mockPlugin.getLogger()).warning("Error parsing the value in the config file for hologram_follow_speed.");
         }
     }
 

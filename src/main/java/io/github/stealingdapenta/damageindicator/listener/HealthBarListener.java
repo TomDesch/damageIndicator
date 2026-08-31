@@ -229,7 +229,7 @@ public class HealthBarListener implements Listener {
                 entitiesWithActiveHologramBars.remove(entity);
                 super.cancel();
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.asInt());
+        }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
 
         return new LivingEntityTaskInfo(task, armorStand);
     }
@@ -244,7 +244,7 @@ public class HealthBarListener implements Listener {
     }
 
     private Component createHealthBar(double current, double max) {
-        int total = HEALTH_BAR_LENGTH.asInt();
+        int total = HEALTH_BAR_LENGTH.asIntAtLeast(1);
         double percent = 1.0 - (current / max);
         int dead = Math.min(total - 1, Math.max(0, (int) Math.round(percent * total)));
         int alive = total - dead;

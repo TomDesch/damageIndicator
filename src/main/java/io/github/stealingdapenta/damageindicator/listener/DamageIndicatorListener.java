@@ -181,7 +181,7 @@ public class DamageIndicatorListener implements Listener {
      * Schedules the jump out animation after the timeout period.
      */
     private void scheduleJumpOut(AttackerVictimPair pair, MergedDamageInfo info) {
-        double timeoutSeconds = ConfigKeys.DAMAGE_MERGE_TIMEOUT.asDouble();
+        double timeoutSeconds = ConfigKeys.DAMAGE_MERGE_TIMEOUT.asDoubleAtLeast(0.0);
         long timeoutTicks = (long) (timeoutSeconds * 20); // Convert seconds to ticks
 
         BukkitTask task = Bukkit.getScheduler()
@@ -213,7 +213,7 @@ public class DamageIndicatorListener implements Listener {
         // Enable gravity and give upward velocity for jump effect (same as regular damage)
         armorStand.setGravity(true);
         double initialVelocityY = ConfigKeys.HOLOGRAM_VELOCITY_Y.asDouble();
-        int duration = ConfigKeys.DAMAGE_MERGE_JUMP_DURATION.asInt();
+        int duration = ConfigKeys.DAMAGE_MERGE_JUMP_DURATION.asIntAtLeast(1);
         double gravity = ConfigKeys.HOLOGRAM_GRAVITY.asDouble();
 
         Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));

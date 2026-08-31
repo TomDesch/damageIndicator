@@ -118,7 +118,7 @@ public class CustomNameListener implements Listener {
                     armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()));
                 }
             }
-        }.runTaskTimer(DamageIndicator.getInstance(), 2, HOLOGRAM_FOLLOW_SPEED.asInt());
+        }.runTaskTimer(DamageIndicator.getInstance(), 2, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
 
         return new LivingEntityTaskInfo(followTask, armorStand);
     }

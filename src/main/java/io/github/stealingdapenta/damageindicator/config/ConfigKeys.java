@@ -65,6 +65,7 @@ public enum ConfigKeys {
 
     private final String defaultValue;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
+    private static final String RANGE_ERROR = "Value in the config file for %s must be at least %s. Using the default value.";
 
     ConfigKeys(String defaultValue) {
         this.defaultValue = defaultValue;
@@ -89,17 +90,41 @@ public enum ConfigKeys {
             return Integer.parseInt(asString());
         } catch (NumberFormatException ex) {
             logParseWarning(name().toLowerCase());
-            return 0;
+            return Integer.parseInt(defaultValue);
         }
+    }
+
+    public int asIntAtLeast(int minimum) {
+        int value = asInt();
+        if (value >= minimum) {
+            return value;
+        }
+
+        logRangeWarning(minimum);
+        return Math.max(minimum, Integer.parseInt(defaultValue));
     }
 
     public double asDouble() {
         try {
-            return Double.parseDouble(asString());
+            double value = Double.parseDouble(asString());
+            if (!Double.isFinite(value)) {
+                throw new NumberFormatException("Value must be finite");
+            }
+            return value;
         } catch (NumberFormatException ex) {
             logParseWarning(name().toLowerCase());
-            return 0.0;
+            return Double.parseDouble(defaultValue);
         }
+    }
+
+    public double asDoubleAtLeast(double minimum) {
+        double value = asDouble();
+        if (value >= minimum) {
+            return value;
+        }
+
+        logRangeWarning(minimum);
+        return Math.max(minimum, Double.parseDouble(defaultValue));
     }
 
     public TextColor getTextColor() {
@@ -113,6 +138,11 @@ public enum ConfigKeys {
     private void logParseWarning(String key) {
         getPlugin().getLogger()
                    .warning(PARSING_ERROR.formatted(key));
+    }
+
+    private void logRangeWarning(Number minimum) {
+        getPlugin().getLogger()
+                   .warning(RANGE_ERROR.formatted(name().toLowerCase(), minimum));
     }
 
     private JavaPlugin getPlugin() {
