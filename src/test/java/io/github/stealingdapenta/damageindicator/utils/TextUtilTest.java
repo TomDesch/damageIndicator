@@ -190,6 +190,16 @@ class TextUtilTest {
     }
 
     @Test
+    void parseFormattedString_EmptyInput_ReturnsEmptyComponent() {
+        assertEquals(Component.text(""), TEXT_UTIL.parseFormattedString(""));
+    }
+
+    @Test
+    void parseFormattedString_FormatCodeWithoutText_ReturnsEmptyComponent() {
+        assertEquals(Component.text(""), TEXT_UTIL.parseFormattedString("&b"));
+    }
+
+    @Test
     void parseRGBComponent_InvalidComponent_NumberFormatExceptionThrown() {
         String invalidComponent = "invalid";
         assertThrows(IllegalArgumentException.class, () -> TEXT_UTIL.parseRGBComponent(invalidComponent));

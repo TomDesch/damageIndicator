@@ -35,7 +35,7 @@ public enum TextUtil {
     public TextComponent parseFormattedString(String input) {
         String[] segments = splitByPatternWithDelimiters(input);
 
-        if (segments.length == 1) {
+        if (segments.length == 1 && !isRgbPattern(segments[0]) && !isDecoratorPattern(segments[0])) {
             return Component.text(segments[0]);
         }
 
@@ -68,7 +68,7 @@ public enum TextUtil {
             }
         }
 
-        return combineTextComponents(formatted);
+        return formatted.isEmpty() ? Component.text("") : combineTextComponents(formatted);
     }
 
     /**
