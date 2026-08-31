@@ -35,6 +35,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -140,6 +141,16 @@ public class HealthBarListener implements Listener {
         restoreNameUponDeath(event);
     }
 
+    @EventHandler(priority = EventPriority.LOW)
+    public void restoreNamesOnChunkLoad(ChunkLoadEvent event) {
+        java.util.Arrays.stream(event.getChunk()
+                                    .getEntities())
+                        .filter(LivingEntity.class::isInstance)
+                        .map(LivingEntity.class::cast)
+                        .filter(this::hasPersistedOriginalName)
+                        .forEach(this::resetEntityName);
+    }
+
     private void displayHolographicHealthBar(LivingEntity entity, Component name) {
         HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars);
         LivingEntityTaskInfo taskInfo = spawnHologramBar(entity, name);
@@ -193,7 +204,7 @@ public class HealthBarListener implements Listener {
         }.runTaskLater(DamageIndicator.getInstance(), getDisplayDurationInTicks());
     }
 
-    private void resetEntityName(LivingEntity entity) {
+    void resetEntityName(LivingEntity entity) {
         OriginalNameState originalName = originalEntityNames.remove(entity);
         if (originalName == null) {
             originalName = readPersistedOriginalName(entity);
@@ -208,11 +219,12 @@ public class HealthBarListener implements Listener {
     }
 
     private void rememberOriginalName(LivingEntity entity) {
-        String customName = entity.getCustomName();
-        OriginalNameState originalName = new OriginalNameState(TEXT_UTIL.deserializeComponent(customName), entity.isCustomNameVisible());
-        if (originalEntityNames.putIfAbsent(entity, originalName) == null) {
+        OriginalNameState originalName = readPersistedOriginalName(entity);
+        if (originalName == null) {
+            originalName = new OriginalNameState(TEXT_UTIL.deserializeComponent(entity.getCustomName()), entity.isCustomNameVisible());
             persistOriginalName(entity, originalName);
         }
+        originalEntityNames.putIfAbsent(entity, originalName);
     }
 
     public void shutdown() {

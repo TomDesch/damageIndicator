@@ -54,7 +54,7 @@ public class CustomNameListener implements Listener {
                            .getEntities())
               .filter(LivingEntity.class::isInstance)
               .map(LivingEntity.class::cast)
-              .forEach(this::replaceWithHologramIfNeeded);
+              .forEach(this::recoverAndReplaceCustomName);
     }
 
     /**
@@ -132,7 +132,7 @@ public class CustomNameListener implements Listener {
         return new LivingEntityTaskInfo(followTask, armorStand);
     }
 
-    private void restoreCustomNameVisibility(LivingEntity entity) {
+    void restoreCustomNameVisibility(LivingEntity entity) {
         if (entity.isValid() && entity.getCustomName() != null) {
             entity.setCustomNameVisible(true);
         }
@@ -142,6 +142,14 @@ public class CustomNameListener implements Listener {
 
     private boolean isEnabled() {
         return ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean() && ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
+    }
+
+    void recoverAndReplaceCustomName(LivingEntity entity) {
+        if (Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                     .get(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN))) {
+            restoreCustomNameVisibility(entity);
+        }
+        replaceWithHologramIfNeeded(entity);
     }
 
     public void shutdown() {

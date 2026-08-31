@@ -1,6 +1,8 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -28,6 +30,8 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.NamespacedKey;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -166,6 +170,22 @@ class CustomNameListenerTest {
             listenerSpy.refreshLoadedEntities();
         }
 
+        verify(listenerSpy).replaceWithHologramIfNeeded(entity);
+    }
+
+    @Test
+    void recoverAndReplaceCustomName_RestoresPersistedVisibilityFirst() {
+        CustomNameListener listenerSpy = spy(listener);
+        LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
+        when(entity.getPersistentDataContainer()).thenReturn(data);
+        when(data.get(any(NamespacedKey.class), eq(PersistentDataType.BOOLEAN))).thenReturn(true);
+        doNothing().when(listenerSpy).restoreCustomNameVisibility(entity);
+        doNothing().when(listenerSpy).replaceWithHologramIfNeeded(entity);
+
+        listenerSpy.recoverAndReplaceCustomName(entity);
+
+        verify(listenerSpy).restoreCustomNameVisibility(entity);
         verify(listenerSpy).replaceWithHologramIfNeeded(entity);
     }
 }

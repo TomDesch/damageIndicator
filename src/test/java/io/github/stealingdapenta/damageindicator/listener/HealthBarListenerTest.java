@@ -2,6 +2,8 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,9 +14,13 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.Chunk;
+import org.bukkit.NamespacedKey;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
 
@@ -139,6 +145,26 @@ class HealthBarListenerTest {
         reset.invoke(listener, entity);
 
         verify(entity).setCustomName(null);
+        verify(entity).setCustomNameVisible(false);
+    }
+
+    @Test
+    void restoreNamesOnChunkLoad_UsesPersistedOriginalName() {
+        HealthBarListener listener = new HealthBarListener();
+        LivingEntity entity = mock(LivingEntity.class);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
+        Chunk chunk = mock(Chunk.class);
+        ChunkLoadEvent event = mock(ChunkLoadEvent.class);
+        when(event.getChunk()).thenReturn(chunk);
+        when(chunk.getEntities()).thenReturn(new org.bukkit.entity.Entity[]{entity});
+        when(entity.getPersistentDataContainer()).thenReturn(data);
+        when(data.get(any(NamespacedKey.class), eq(PersistentDataType.BOOLEAN)))
+            .thenAnswer(invocation -> ((NamespacedKey) invocation.getArgument(0)).getKey().equals("health-name-overridden"));
+        when(data.get(any(NamespacedKey.class), eq(PersistentDataType.STRING))).thenReturn("Original");
+
+        listener.restoreNamesOnChunkLoad(event);
+
+        verify(entity).setCustomName("Original");
         verify(entity).setCustomNameVisible(false);
     }
 }
