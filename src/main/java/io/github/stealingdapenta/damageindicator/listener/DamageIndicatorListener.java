@@ -33,6 +33,7 @@ import org.bukkit.util.Vector;
 public class DamageIndicatorListener implements Listener {
 
     private static final String CUSTOM_NSK_TAG = "customnsktag";
+    private static final int ARMOR_STAND_ANIMATION_INTERVAL_TICKS = 1;
 
     // Map to track merged damage for attacker-victim pairs
     private final Map<AttackerVictimPair, MergedDamageInfo> mergedDamageMap = new HashMap<>();
@@ -319,8 +320,6 @@ public class DamageIndicatorListener implements Listener {
         Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));
 
         AtomicInteger steps = new AtomicInteger(30); // 30 ticks total
-        int intervalTicks = 0; // run every tick (change if performance needed)
-
         Bukkit.getScheduler()
               .runTaskTimer(DamageIndicator.getInstance(), task -> {
                   armorStand.teleport(armorStand.getLocation()
@@ -331,7 +330,7 @@ public class DamageIndicatorListener implements Listener {
                       armorStand.remove();
                       task.cancel();
                   }
-              }, 0, intervalTicks);
+              }, 0L, ARMOR_STAND_ANIMATION_INTERVAL_TICKS);
     }
 
     /**

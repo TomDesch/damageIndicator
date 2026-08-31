@@ -92,6 +92,14 @@ class DamageIndicatorListenerTest {
         assertEquals(-50, hitLocation.getZ(), 0.001);
     }
 
+    @Test
+    void testAnimationSchedulerUsesPositiveTickInterval() throws Exception {
+        Field intervalField = DamageIndicatorListener.class.getDeclaredField("ARMOR_STAND_ANIMATION_INTERVAL_TICKS");
+        intervalField.setAccessible(true);
+
+        assertEquals(1, intervalField.getInt(null));
+    }
+
     // ===== Tests for updateMergedDamageDisplay =====
 
     @Test
