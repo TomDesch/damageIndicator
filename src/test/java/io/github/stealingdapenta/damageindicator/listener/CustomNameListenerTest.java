@@ -7,7 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import net.kyori.adventure.text.Component;
+import java.lang.reflect.Method;
 import org.bukkit.Chunk;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -84,5 +84,18 @@ class CustomNameListenerTest {
 
         // We can't verify the internals of HOLOGRAPH_UTIL, but this ensures the code path runs
         // To properly verify cancellation behavior, unit test HOLOGRAPH_UTIL separately
+    }
+
+    @Test
+    void restoreCustomNameVisibility_ValidNamedEntityMakesNameVisible() throws Exception {
+        LivingEntity entity = mock(LivingEntity.class);
+        when(entity.isValid()).thenReturn(true);
+        when(entity.getCustomName()).thenReturn("VisibleName");
+
+        Method method = CustomNameListener.class.getDeclaredMethod("restoreCustomNameVisibility", LivingEntity.class);
+        method.setAccessible(true);
+        method.invoke(listener, entity);
+
+        verify(entity).setCustomNameVisible(true);
     }
 }

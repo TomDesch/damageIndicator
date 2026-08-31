@@ -94,6 +94,7 @@ public class CustomNameListener implements Listener {
 
             @Override
             public synchronized void cancel() throws IllegalStateException {
+                restoreCustomNameVisibility(entity);
                 if (armorStand.isValid()) {
                     armorStand.remove();
                 } else {
@@ -121,5 +122,11 @@ public class CustomNameListener implements Listener {
         }.runTaskTimer(DamageIndicator.getInstance(), 2, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
 
         return new LivingEntityTaskInfo(followTask, armorStand);
+    }
+
+    private void restoreCustomNameVisibility(LivingEntity entity) {
+        if (entity.isValid() && entity.getCustomName() != null) {
+            entity.setCustomNameVisible(true);
+        }
     }
 }
