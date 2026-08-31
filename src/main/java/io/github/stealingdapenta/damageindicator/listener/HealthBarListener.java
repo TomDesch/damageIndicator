@@ -234,7 +234,7 @@ public class HealthBarListener implements Listener {
 
             @Override
             public void run() {
-                if (ticks++ >= getDisplayDurationInTicks() || !entity.isValid()) {
+                if (shouldRemoveHologramBar(ticks++, entity.isValid(), HEALTH_BAR_ALWAYS_VISIBLE.asBoolean())) {
                     cancel();
                     return;
                 }
@@ -254,6 +254,10 @@ public class HealthBarListener implements Listener {
         }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
 
         return new LivingEntityTaskInfo(task, armorStand);
+    }
+
+    private boolean shouldRemoveHologramBar(int ticks, boolean entityValid, boolean alwaysVisible) {
+        return !entityValid || (!alwaysVisible && ticks >= getDisplayDurationInTicks());
     }
 
     private int getDisplayDurationInTicks() {

@@ -105,4 +105,14 @@ class HealthBarListenerTest {
 
         assertFalse(hasDamageByEntityHandler);
     }
+
+    @Test
+    void shouldRemoveHologramBar_DoesNotExpireAlwaysVisibleBars() throws Exception {
+        HealthBarListener listener = new HealthBarListener();
+        Method method = HealthBarListener.class.getDeclaredMethod("shouldRemoveHologramBar", int.class, boolean.class, boolean.class);
+        method.setAccessible(true);
+
+        assertEquals(false, method.invoke(listener, Integer.MAX_VALUE, true, true));
+        assertEquals(true, method.invoke(listener, 0, false, true));
+    }
 }
