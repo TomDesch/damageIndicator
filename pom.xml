@@ -21,22 +21,50 @@
           <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <relocations>
+                <relocation>
+                  <pattern>net.kyori</pattern>
+                  <shadedPattern>io.github.stealingdapenta.damageindicator.internal.kyori</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
   <dependencies>
-    <!-- Bukkit/Spigot API for server compatibility across Paper and Spigot builds -->
+    <!-- Compile against Spigot so Paper-only APIs cannot accidentally enter the shared artifact. -->
     <dependency>
       <groupId>org.spigotmc</groupId>
       <artifactId>spigot-api</artifactId>
       <version>1.21.10-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
+
+    <!-- Shaded and relocated because Spigot does not provide Adventure. -->
     <dependency>
-      <groupId>io.papermc.paper</groupId>
-      <artifactId>paper-api</artifactId>
-      <version>1.21.10-R0.1-SNAPSHOT</version>
-      <scope>provided</scope>
+      <groupId>net.kyori</groupId>
+      <artifactId>adventure-api</artifactId>
+      <version>${adventure.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>net.kyori</groupId>
+      <artifactId>adventure-text-serializer-legacy</artifactId>
+      <version>${adventure.version}</version>
     </dependency>
 
     <!-- JUnit Jupiter (for unit testing) -->
@@ -78,15 +106,12 @@
     <java.version>21</java.version>
     <mockito.version>5.17.0</mockito.version>
     <byte-buddy.version>1.18.7</byte-buddy.version>
+    <adventure.version>4.25.0</adventure.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
 
   <repositories>
-    <repository>
-      <id>papermc-repo</id>
-      <url>https://repo.papermc.io/repository/maven-public/</url>
-    </repository>
     <repository>
       <id>spigotmc-repo</id>
       <url>https://hub.spigotmc.org/nexus/content/repositories/public/</url>
