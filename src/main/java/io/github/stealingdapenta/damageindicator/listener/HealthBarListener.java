@@ -199,9 +199,7 @@ public class HealthBarListener implements Listener {
 
     private void rememberOriginalName(LivingEntity entity) {
         String customName = entity.getCustomName();
-        if (!originalEntityNames.containsKey(entity) && customName != null) {
-            originalEntityNames.put(entity, new OriginalNameState(TEXT_UTIL.deserializeComponent(customName), entity.isCustomNameVisible()));
-        }
+        originalEntityNames.putIfAbsent(entity, new OriginalNameState(TEXT_UTIL.deserializeComponent(customName), entity.isCustomNameVisible()));
     }
 
     public void shutdown() {
@@ -234,13 +232,11 @@ public class HealthBarListener implements Listener {
 
             @Override
             public void run() {
-                if (shouldRemoveHologramBar(ticks++, entity.isValid(), HEALTH_BAR_ALWAYS_VISIBLE.asBoolean())) {
+                if (shouldRemoveHologramBar(ticks++, entity.isValid(), armorStand.isValid(), HEALTH_BAR_ALWAYS_VISIBLE.asBoolean())) {
                     cancel();
                     return;
                 }
-                if (armorStand.isValid()) {
-                    armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()));
-                }
+                armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()));
             }
 
             @Override
@@ -256,8 +252,8 @@ public class HealthBarListener implements Listener {
         return new LivingEntityTaskInfo(task, armorStand);
     }
 
-    private boolean shouldRemoveHologramBar(int ticks, boolean entityValid, boolean alwaysVisible) {
-        return !entityValid || (!alwaysVisible && ticks >= getDisplayDurationInTicks());
+    private boolean shouldRemoveHologramBar(int ticks, boolean entityValid, boolean armorStandValid, boolean alwaysVisible) {
+        return !entityValid || !armorStandValid || (!alwaysVisible && ticks >= getDisplayDurationInTicks());
     }
 
     private int getDisplayDurationInTicks() {

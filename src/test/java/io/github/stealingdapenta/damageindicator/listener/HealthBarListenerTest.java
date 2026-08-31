@@ -109,10 +109,29 @@ class HealthBarListenerTest {
     @Test
     void shouldRemoveHologramBar_DoesNotExpireAlwaysVisibleBars() throws Exception {
         HealthBarListener listener = new HealthBarListener();
-        Method method = HealthBarListener.class.getDeclaredMethod("shouldRemoveHologramBar", int.class, boolean.class, boolean.class);
+        Method method = HealthBarListener.class.getDeclaredMethod("shouldRemoveHologramBar", int.class, boolean.class, boolean.class, boolean.class);
         method.setAccessible(true);
 
-        assertEquals(false, method.invoke(listener, Integer.MAX_VALUE, true, true));
-        assertEquals(true, method.invoke(listener, 0, false, true));
+        assertEquals(false, method.invoke(listener, Integer.MAX_VALUE, true, true, true));
+        assertEquals(true, method.invoke(listener, 0, false, true, true));
+        assertEquals(true, method.invoke(listener, 0, true, false, true));
+    }
+
+    @Test
+    void rememberOriginalName_TracksOriginallyUnnamedEntities() throws Exception {
+        HealthBarListener listener = new HealthBarListener();
+        LivingEntity entity = mock(LivingEntity.class);
+        when(entity.getCustomName()).thenReturn(null);
+        when(entity.isCustomNameVisible()).thenReturn(false);
+
+        Method remember = HealthBarListener.class.getDeclaredMethod("rememberOriginalName", LivingEntity.class);
+        remember.setAccessible(true);
+        remember.invoke(listener, entity);
+        Method reset = HealthBarListener.class.getDeclaredMethod("resetEntityName", LivingEntity.class);
+        reset.setAccessible(true);
+        reset.invoke(listener, entity);
+
+        verify(entity).setCustomName(null);
+        verify(entity).setCustomNameVisible(false);
     }
 }
