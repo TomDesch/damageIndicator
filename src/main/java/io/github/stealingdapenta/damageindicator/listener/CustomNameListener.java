@@ -7,6 +7,7 @@ import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -128,5 +129,12 @@ public class CustomNameListener implements Listener {
         if (entity.isValid() && entity.getCustomName() != null) {
             entity.setCustomNameVisible(true);
         }
+    }
+
+    public void shutdown() {
+        new ArrayList<>(entitiesWithActiveHolographicCustomNames.keySet()).forEach(entity -> {
+            restoreCustomNameVisibility(entity);
+            HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHolographicCustomNames);
+        });
     }
 }

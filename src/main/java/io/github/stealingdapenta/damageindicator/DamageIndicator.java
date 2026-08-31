@@ -67,6 +67,9 @@ public class DamageIndicator extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        customNamesListener.shutdown();
+        healthBarListener.shutdown();
+        damageIndicatorListener.shutdown();
         instance = null;
         getLogger().info("Damage Indicator plugin disabled.");
     }

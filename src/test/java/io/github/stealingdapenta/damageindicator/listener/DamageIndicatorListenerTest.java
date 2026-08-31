@@ -23,6 +23,7 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +47,13 @@ class DamageIndicatorListenerTest {
         Field mapField = DamageIndicatorListener.class.getDeclaredField("mergedDamageMap");
         mapField.setAccessible(true);
         return (Map<AttackerVictimPair, MergedDamageInfo>) mapField.get(listener);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<ArmorStand, BukkitTask> getActiveAnimationTasks() throws Exception {
+        Field mapField = DamageIndicatorListener.class.getDeclaredField("activeAnimationTasks");
+        mapField.setAccessible(true);
+        return (Map<ArmorStand, BukkitTask>) mapField.get(listener);
     }
 
     private void invokeUpdateMergedDamageDisplay(MergedDamageInfo info) throws Exception {
@@ -186,5 +194,20 @@ class DamageIndicatorListenerTest {
 
         assertNotNull(map);
         assertTrue(map.isEmpty());
+    }
+
+    @Test
+    void shutdown_CancelsTasksAndRemovesArmorStands() throws Exception {
+        ArmorStand armorStand = mock(ArmorStand.class);
+        BukkitTask task = mock(BukkitTask.class);
+        when(armorStand.isValid()).thenReturn(true);
+        when(task.isCancelled()).thenReturn(false);
+        getActiveAnimationTasks().put(armorStand, task);
+
+        listener.shutdown();
+
+        verify(task).cancel();
+        verify(armorStand).remove();
+        assertTrue(getActiveAnimationTasks().isEmpty());
     }
 }

@@ -15,6 +15,7 @@ import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -211,6 +212,18 @@ public class HealthBarListener implements Listener {
         if (!originalEntityNames.containsKey(entity) && customName != null) {
             originalEntityNames.put(entity, TEXT_UTIL.deserializeComponent(customName));
         }
+    }
+
+    public void shutdown() {
+        new ArrayList<>(entitiesWithActiveHealthBars.values()).forEach(task -> {
+            if (!task.isCancelled()) {
+                task.cancel();
+            }
+        });
+        entitiesWithActiveHealthBars.clear();
+
+        new ArrayList<>(entitiesWithActiveHologramBars.keySet()).forEach(entity -> HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars));
+        new ArrayList<>(originalEntityNames.keySet()).forEach(this::resetEntityName);
     }
 
     private LivingEntityTaskInfo spawnHologramBar(LivingEntity entity, Component name) {

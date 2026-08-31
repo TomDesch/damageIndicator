@@ -38,6 +38,7 @@ public class DamageIndicatorListener implements Listener {
 
     // Map to track merged damage for attacker-victim pairs
     private final Map<AttackerVictimPair, MergedDamageInfo> mergedDamageMap = new HashMap<>();
+    private final Map<ArmorStand, BukkitTask> activeAnimationTasks = new HashMap<>();
 
     /**
      * Returns the unique tag key used to identify plugin-controlled armor stands.
@@ -197,6 +198,7 @@ public class DamageIndicatorListener implements Listener {
         ArmorStand armorStand = info.getArmorStand();
         if (armorStand == null || !armorStand.isValid()) {
             mergedDamageMap.remove(pair);
+            activeAnimationTasks.remove(armorStand);
             return;
         }
 
@@ -220,10 +222,12 @@ public class DamageIndicatorListener implements Listener {
 
         AtomicInteger steps = new AtomicInteger(duration);
 
-        Bukkit.getScheduler()
-              .runTaskTimer(DamageIndicator.getInstance(), task -> {
+        BukkitTask[] taskHolder = new BukkitTask[1];
+        BukkitTask animationTask = Bukkit.getScheduler()
+                                        .runTaskTimer(DamageIndicator.getInstance(), () -> {
                   if (!armorStand.isValid()) {
-                      task.cancel();
+                      activeAnimationTasks.remove(armorStand);
+                      taskHolder[0].cancel();
                       return;
                   }
 
@@ -233,9 +237,12 @@ public class DamageIndicatorListener implements Listener {
 
                   if (steps.decrementAndGet() <= 0) {
                       armorStand.remove();
-                      task.cancel();
+                      activeAnimationTasks.remove(armorStand);
+                      taskHolder[0].cancel();
                   }
               }, 0, 1);
+        taskHolder[0] = animationTask;
+        activeAnimationTasks.put(armorStand, animationTask);
     }
 
     /**
@@ -304,17 +311,42 @@ public class DamageIndicatorListener implements Listener {
         Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));
 
         AtomicInteger steps = new AtomicInteger(30); // 30 ticks total
-        Bukkit.getScheduler()
-              .runTaskTimer(DamageIndicator.getInstance(), task -> {
+        BukkitTask[] taskHolder = new BukkitTask[1];
+        BukkitTask animationTask = Bukkit.getScheduler()
+                                         .runTaskTimer(DamageIndicator.getInstance(), () -> {
+                  if (!armorStand.isValid()) {
+                      activeAnimationTasks.remove(armorStand);
+                      taskHolder[0].cancel();
+                      return;
+                  }
                   armorStand.teleport(armorStand.getLocation()
                                                 .add(velocity));
                   velocity.subtract(new Vector(0, gravity, 0)); // apply gravity
 
                   if (steps.decrementAndGet() <= 0) {
                       armorStand.remove();
-                      task.cancel();
+                      activeAnimationTasks.remove(armorStand);
+                      taskHolder[0].cancel();
                   }
               }, 0L, ARMOR_STAND_ANIMATION_INTERVAL_TICKS);
+        taskHolder[0] = animationTask;
+        activeAnimationTasks.put(armorStand, animationTask);
+    }
+
+    public void shutdown() {
+        mergedDamageMap.values()
+                       .forEach(MergedDamageInfo::cleanup);
+        mergedDamageMap.clear();
+
+        activeAnimationTasks.forEach((armorStand, task) -> {
+            if (!task.isCancelled()) {
+                task.cancel();
+            }
+            if (armorStand.isValid()) {
+                armorStand.remove();
+            }
+        });
+        activeAnimationTasks.clear();
     }
 
     /**

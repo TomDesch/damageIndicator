@@ -1,5 +1,6 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.mock;
@@ -7,13 +8,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
 import org.bukkit.Chunk;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -97,5 +103,29 @@ class CustomNameListenerTest {
         method.invoke(listener, entity);
 
         verify(entity).setCustomNameVisible(true);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shutdown_RemovesHologramsAndRestoresNameVisibility() throws Exception {
+        LivingEntity entity = mock(LivingEntity.class);
+        ArmorStand armorStand = mock(ArmorStand.class);
+        BukkitTask task = mock(BukkitTask.class);
+        when(entity.isValid()).thenReturn(true);
+        when(entity.getCustomName()).thenReturn("VisibleName");
+        when(armorStand.isValid()).thenReturn(true);
+        when(task.isCancelled()).thenReturn(false);
+
+        Field field = CustomNameListener.class.getDeclaredField("entitiesWithActiveHolographicCustomNames");
+        field.setAccessible(true);
+        Map<LivingEntity, LivingEntityTaskInfo> active = (Map<LivingEntity, LivingEntityTaskInfo>) field.get(listener);
+        active.put(entity, new LivingEntityTaskInfo(task, armorStand));
+
+        listener.shutdown();
+
+        verify(entity).setCustomNameVisible(true);
+        verify(task).cancel();
+        verify(armorStand).remove();
+        assertEquals(0, active.size());
     }
 }

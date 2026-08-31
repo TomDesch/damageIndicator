@@ -5,9 +5,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
 
 class HealthBarListenerTest {
@@ -71,5 +75,26 @@ class HealthBarListenerTest {
 
         assertEquals(false, method.invoke(listener, event, victim));
         assertEquals(true, method.invoke(listener, event, victim));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shutdown_CancelsTasksAndRestoresOriginalNames() throws Exception {
+        HealthBarListener listener = new HealthBarListener();
+        LivingEntity entity = mock(LivingEntity.class);
+        BukkitTask task = mock(BukkitTask.class);
+        when(task.isCancelled()).thenReturn(false);
+
+        Field tasksField = HealthBarListener.class.getDeclaredField("entitiesWithActiveHealthBars");
+        tasksField.setAccessible(true);
+        ((Map<LivingEntity, BukkitTask>) tasksField.get(listener)).put(entity, task);
+        Field namesField = HealthBarListener.class.getDeclaredField("originalEntityNames");
+        namesField.setAccessible(true);
+        ((Map<LivingEntity, Component>) namesField.get(listener)).put(entity, Component.text("Original"));
+
+        listener.shutdown();
+
+        verify(task).cancel();
+        verify(entity).setCustomName("Original");
     }
 }
