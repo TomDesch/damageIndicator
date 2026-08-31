@@ -68,6 +68,7 @@ public enum ConfigKeys {
     private final List<String> legacyKeys;
     private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
     private static final String RANGE_ERROR = "Value in the config file for %s must be at least %s. Using the default value.";
+    private static final String BOUNDED_RANGE_ERROR = "Value in the config file for %s must be between %s and %s. Using the default value.";
 
     ConfigKeys(String defaultValue, String... legacyKeys) {
         this.defaultValue = defaultValue;
@@ -113,6 +114,17 @@ public enum ConfigKeys {
 
         logRangeWarning(minimum);
         return Math.max(minimum, Integer.parseInt(defaultValue));
+    }
+
+    public int asIntBetween(int minimum, int maximum) {
+        int value = asInt();
+        if (value >= minimum && value <= maximum) {
+            return value;
+        }
+
+        getPlugin().getLogger()
+                   .warning(BOUNDED_RANGE_ERROR.formatted(getConfigKey(), minimum, maximum));
+        return Math.max(minimum, Math.min(maximum, Integer.parseInt(defaultValue)));
     }
 
     public double asDouble() {

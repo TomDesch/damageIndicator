@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.config;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_DAMAGE_INDICATOR;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_LENGTH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -171,6 +172,19 @@ class ConfigKeysTest {
 
             assertEquals(Double.parseDouble(HOLOGRAM_FOLLOW_SPEED.getDefaultValue()), HOLOGRAM_FOLLOW_SPEED.asDouble());
             verify(mockPlugin.getLogger()).warning("Error parsing the value in the config file for hologram_follow_speed.");
+        }
+    }
+
+    @Test
+    void asIntBetween_valueAboveMaximum_logsWarningAndReturnsDefault() {
+        when(mockConfig.getString(anyString())).thenReturn("1000000000");
+
+        try (MockedStatic<DamageIndicator> mockedStatic = mockStatic(DamageIndicator.class)) {
+            mockedStatic.when(DamageIndicator::getInstance)
+                        .thenReturn(mockPlugin);
+
+            assertEquals(Integer.parseInt(HEALTH_BAR_LENGTH.getDefaultValue()), HEALTH_BAR_LENGTH.asIntBetween(1, 100));
+            verify(mockPlugin.getLogger()).warning("Value in the config file for health_bar_length must be between 1 and 100. Using the default value.");
         }
     }
 

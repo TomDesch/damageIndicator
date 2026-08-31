@@ -44,6 +44,7 @@ public class HealthBarListener implements Listener {
     private static final int TICKS_PER_SECOND = 20;
     private static final int MIN_SECONDS = 1;
     private static final int MAX_SECONDS = 10;
+    private static final int MAX_HEALTH_BAR_LENGTH = 100;
 
     private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
     private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
@@ -265,7 +266,7 @@ public class HealthBarListener implements Listener {
     }
 
     private Component createHealthBar(double current, double max) {
-        int total = HEALTH_BAR_LENGTH.asIntAtLeast(1);
+        int total = HEALTH_BAR_LENGTH.asIntBetween(1, MAX_HEALTH_BAR_LENGTH);
         double percent = 1.0 - (current / max);
         int dead = Math.min(total - 1, Math.max(0, (int) Math.round(percent * total)));
         int alive = total - dead;
