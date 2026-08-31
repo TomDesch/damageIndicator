@@ -5,8 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,8 +18,11 @@ import io.github.stealingdapenta.damageindicator.utils.AttackerVictimPair;
 import io.github.stealingdapenta.damageindicator.utils.MergedDamageInfo;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 import net.kyori.adventure.text.format.TextColor;
+import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
@@ -26,6 +32,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 class DamageIndicatorListenerTest {
 
@@ -209,5 +216,22 @@ class DamageIndicatorListenerTest {
         verify(task).cancel();
         verify(armorStand).remove();
         assertTrue(getActiveAnimationTasks().isEmpty());
+    }
+
+    @Test
+    void cleanupLoadedChunks_ProcessesEntitiesLoadedBeforePluginEnable() {
+        DamageIndicatorListener listenerSpy = spy(listener);
+        Chunk chunk = mock(Chunk.class);
+        org.bukkit.entity.Entity entity = mock(org.bukkit.entity.Entity.class);
+        when(world.getLoadedChunks()).thenReturn(new Chunk[]{chunk});
+        when(chunk.getEntities()).thenReturn(new org.bukkit.entity.Entity[]{entity});
+        doNothing().when(listenerSpy).maybeRemoveArmorStandIfTagged(entity);
+
+        try (MockedStatic<Bukkit> bukkitStatic = mockStatic(Bukkit.class)) {
+            bukkitStatic.when(Bukkit::getWorlds).thenReturn(List.of(world));
+            listenerSpy.cleanupLoadedChunks();
+        }
+
+        verify(listenerSpy).maybeRemoveArmorStandIfTagged(entity);
     }
 }

@@ -57,10 +57,18 @@ public class DamageIndicatorListener implements Listener {
               .forEach(this::maybeRemoveArmorStandIfTagged);
     }
 
-    private void maybeRemoveArmorStandIfTagged(Entity entity) {
+    void maybeRemoveArmorStandIfTagged(Entity entity) {
         if (hasCustomTag(entity)) {
             entity.remove();
         }
+    }
+
+    public void cleanupLoadedChunks() {
+        Bukkit.getWorlds()
+              .stream()
+              .flatMap(world -> Arrays.stream(world.getLoadedChunks()))
+              .flatMap(chunk -> Arrays.stream(chunk.getEntities()))
+              .forEach(this::maybeRemoveArmorStandIfTagged);
     }
 
     private boolean hasCustomTag(Entity entity) {
