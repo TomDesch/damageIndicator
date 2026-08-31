@@ -150,9 +150,7 @@ public class HealthBarListener implements Listener {
             oldTask.cancel();
         }
 
-        if (entity.getCustomName() != null) {
-            originalEntityNames.put(entity, TEXT_UTIL.deserializeComponent(entity.getCustomName()));
-        }
+        rememberOriginalName(entity);
 
         entity.setCustomName(TEXT_UTIL.serializeComponent(name));
         entity.setCustomNameVisible(true);
@@ -201,6 +199,13 @@ public class HealthBarListener implements Listener {
         } else {
             entity.setCustomName(null);
             entity.setCustomNameVisible(false);
+        }
+    }
+
+    private void rememberOriginalName(LivingEntity entity) {
+        String customName = entity.getCustomName();
+        if (!originalEntityNames.containsKey(entity) && customName != null) {
+            originalEntityNames.put(entity, TEXT_UTIL.deserializeComponent(customName));
         }
     }
 

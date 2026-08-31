@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
@@ -36,5 +37,23 @@ class HealthBarListenerTest {
         double result = (double) method.invoke(listener, entity, 15.0, 20.0);
 
         assertEquals(0.0, result, 0.0001);
+    }
+
+    @Test
+    void rememberOriginalName_DoesNotOverwriteNameOnLaterUpdates() throws Exception {
+        HealthBarListener listener = new HealthBarListener();
+        LivingEntity entity = mock(LivingEntity.class);
+        when(entity.getCustomName()).thenReturn("Original name", "Current health bar");
+
+        Method remember = HealthBarListener.class.getDeclaredMethod("rememberOriginalName", LivingEntity.class);
+        remember.setAccessible(true);
+        remember.invoke(listener, entity);
+        remember.invoke(listener, entity);
+
+        Method reset = HealthBarListener.class.getDeclaredMethod("resetEntityName", LivingEntity.class);
+        reset.setAccessible(true);
+        reset.invoke(listener, entity);
+
+        verify(entity).setCustomName("Original name");
     }
 }
