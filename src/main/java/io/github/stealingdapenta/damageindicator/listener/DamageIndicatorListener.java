@@ -6,6 +6,7 @@ import io.github.stealingdapenta.damageindicator.utils.AttackerVictimPair;
 import io.github.stealingdapenta.damageindicator.utils.MergedDamageInfo;
 import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -86,18 +87,20 @@ public class DamageIndicatorListener implements Listener {
         if (!(entity instanceof LivingEntity livingEntity)) {
             return;
         }
-        if (!ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) {
-            return;
-        }
+        if (event.isCancelled()) return;
+        Entity attacker = event instanceof EntityDamageByEntityEvent attack ? attack.getDamager() : null;
+        displayDamage(livingEntity, attacker, Math.min(event.getFinalDamage(), livingEntity.getHealth()), event.getCause());
+    }
 
-        double damageDealt = event.getFinalDamage();
-        TextColor textColor = resolveColorForCause(event.getCause());
-        Location location = getHitLocation(livingEntity);
-
-        // Check if damage merge is enabled and this is an entity attack
-        if (ConfigKeys.ENABLE_DAMAGE_MERGE.asBoolean() && event instanceof EntityDamageByEntityEvent damageByEntityEvent) {
-            Entity damager = damageByEntityEvent.getDamager();
-            handleMergedDamage(damager, livingEntity, location, damageDealt, textColor);
+    /** Receives actual HP lost (after shields/blocks), including virtual-health integrations. */
+    public void displayDamage(LivingEntity victim, Entity attacker, double damageDealt, EntityDamageEvent.DamageCause cause) {
+        if (victim == null || !Double.isFinite(damageDealt) || damageDealt <= 0
+                || !ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean()) return;
+        TextColor textColor = resolveColorForCause(cause == null ? EntityDamageEvent.DamageCause.CUSTOM : cause);
+        Location location = getHitLocation(victim);
+        if (location.getWorld() == null) return;
+        if (ConfigKeys.ENABLE_DAMAGE_MERGE.asBoolean() && attacker != null) {
+            handleMergedDamage(attacker, victim, location, damageDealt, textColor);
         } else {
             // Normal damage indicator without merging
             animateArmorStand(location, damageDealt, textColor);
@@ -207,7 +210,9 @@ public class DamageIndicatorListener implements Listener {
      */
     private void executeJumpOut(AttackerVictimPair pair, MergedDamageInfo info) {
         ArmorStand armorStand = info.getArmorStand();
+        if (info.getTimeoutTask() != null) info.getTimeoutTask().cancel();
         if (armorStand == null || !armorStand.isValid()) {
+            info.cleanup();
             mergedDamageMap.remove(pair);
             activeAnimationTasks.remove(armorStand);
             return;
@@ -257,20 +262,15 @@ public class DamageIndicatorListener implements Listener {
     }
 
     /**
-     * Cleans up merged damage when the entity dies.
+     * Releases lethal-hit numbers into their falling animation instead of deleting them with the victim.
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityDeath(EntityDeathEvent event) {
         LivingEntity entity = event.getEntity();
 
-        mergedDamageMap.entrySet()
-                       .removeIf(entry -> {
-                           if (entry.getKey().involves(entity.getUniqueId())) {
-                               entry.getValue().cleanup();
-                               return true;
-                           }
-                           return false;
-                       });
+        for (var entry : new ArrayList<>(mergedDamageMap.entrySet())) {
+            if (entry.getKey().involves(entity.getUniqueId())) executeJumpOut(entry.getKey(), entry.getValue());
+        }
     }
 
     /**
@@ -289,6 +289,7 @@ public class DamageIndicatorListener implements Listener {
                            armorStand.setCollidable(false);
                            armorStand.setSmall(true);
                            armorStand.setInvulnerable(true);
+                           armorStand.setPersistent(false);
                            armorStand.getPersistentDataContainer()
                                      .set(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
                        });

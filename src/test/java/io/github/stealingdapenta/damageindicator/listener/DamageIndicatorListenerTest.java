@@ -38,6 +38,83 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 class DamageIndicatorListenerTest {
+    @Test
+    void nativeAndVirtualDamageShareDisplayWithoutFakeNativeEvents() {
+        listener = spy(new DamageIndicatorListener());
+        LivingEntity victim = mock(LivingEntity.class);
+        org.bukkit.entity.Entity attacker = mock(org.bukkit.entity.Entity.class);
+        when(victim.getHealth()).thenReturn(3.0);
+        org.bukkit.event.entity.EntityDamageByEntityEvent nativeHit = mock(org.bukkit.event.entity.EntityDamageByEntityEvent.class);
+        when(nativeHit.getEntity()).thenReturn(victim);
+        when(nativeHit.getDamager()).thenReturn(attacker);
+        when(nativeHit.getFinalDamage()).thenReturn(100.0);
+        when(nativeHit.getCause()).thenReturn(EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+        doNothing().when(listener).displayDamage(any(), any(), org.mockito.ArgumentMatchers.anyDouble(), any());
+        listener.displayDamageIndicator(nativeHit);
+        verify(listener).displayDamage(victim, attacker, 3, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+        when(nativeHit.isCancelled()).thenReturn(true);
+        listener.displayDamageIndicator(nativeHit);
+        verify(listener, times(1)).displayDamage(victim, attacker, 3, EntityDamageEvent.DamageCause.ENTITY_ATTACK);
+    }
+
+    @Test
+    void virtualDamageUsesConfiguredFallingAnimationAndRejectsBlockedOrInvalidDamage() {
+        var plugin = mock(io.github.stealingdapenta.damageindicator.DamageIndicator.class);
+        var config = new org.bukkit.configuration.file.YamlConfiguration();
+        config.set("enable_damage_indicator", "true");
+        config.set("enable_damage_merge", "false");
+        when(plugin.getConfig()).thenReturn(config);
+        LivingEntity victim = mock(LivingEntity.class);
+        when(victim.getLocation()).thenReturn(testLocation.clone());
+        DamageIndicatorListener display = spy(listener);
+        doNothing().when(display).animateArmorStand(any(), org.mockito.ArgumentMatchers.anyDouble(), any());
+        try (var singleton = mockStatic(io.github.stealingdapenta.damageindicator.DamageIndicator.class)) {
+            singleton.when(io.github.stealingdapenta.damageindicator.DamageIndicator::getInstance).thenReturn(plugin);
+            display.displayDamage(victim, null, 2.5, EntityDamageEvent.DamageCause.PROJECTILE);
+            verify(display).animateArmorStand(any(), org.mockito.ArgumentMatchers.eq(2.5), any());
+            for (double blocked : new double[] {0, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+                display.displayDamage(victim, null, blocked, EntityDamageEvent.DamageCause.PROJECTILE);
+            }
+            verify(display, times(1)).animateArmorStand(any(), org.mockito.ArgumentMatchers.anyDouble(), any());
+            verify(victim, never()).setHealth(org.mockito.ArgumentMatchers.anyDouble());
+            verify(victim, never()).damage(org.mockito.ArgumentMatchers.anyDouble());
+        }
+    }
+
+    @Test
+    void lethalMergedIndicatorFallsRatherThanDisappearingWithNativeCorpse() throws Exception {
+        var plugin = mock(io.github.stealingdapenta.damageindicator.DamageIndicator.class);
+        when(plugin.getConfig()).thenReturn(new org.bukkit.configuration.file.YamlConfiguration());
+        LivingEntity attacker = mock(LivingEntity.class);
+        LivingEntity victim = mock(LivingEntity.class);
+        when(attacker.getUniqueId()).thenReturn(java.util.UUID.randomUUID());
+        when(victim.getUniqueId()).thenReturn(java.util.UUID.randomUUID());
+        ArmorStand stand = mock(ArmorStand.class);
+        when(stand.isValid()).thenReturn(true);
+        MergedDamageInfo info = new MergedDamageInfo(3, TextColor.color(255, 0, 0), stand);
+        BukkitTask timeout = mock(BukkitTask.class);
+        BukkitTask follow = mock(BukkitTask.class);
+        info.setTimeoutTask(timeout);
+        info.setFollowTask(follow);
+        getMergedDamageMap().put(new AttackerVictimPair(attacker, victim), info);
+        var scheduler = mock(org.bukkit.scheduler.BukkitScheduler.class);
+        when(scheduler.runTaskTimer(any(), any(Runnable.class), org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq(1L))).thenReturn(mock(BukkitTask.class));
+        EntityDeathEvent death = mock(EntityDeathEvent.class);
+        when(death.getEntity()).thenReturn(victim);
+        try (var singleton = mockStatic(io.github.stealingdapenta.damageindicator.DamageIndicator.class);
+             var bukkit = mockStatic(Bukkit.class)) {
+            singleton.when(io.github.stealingdapenta.damageindicator.DamageIndicator::getInstance).thenReturn(plugin);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            listener.onEntityDeath(death);
+            verify(timeout).cancel();
+            verify(follow).cancel();
+            verify(stand).setGravity(true);
+            verify(stand, never()).remove();
+            assertTrue(getMergedDamageMap().isEmpty());
+            assertEquals(1, getActiveAnimationTasks().size());
+        }
+    }
 
     private DamageIndicatorListener listener;
     private World world;

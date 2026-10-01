@@ -31,6 +31,16 @@ public class DamageIndicator extends JavaPlugin {
         return instance;
     }
 
+    /**
+     * Displays already-applied custom HP damage without manufacturing a Bukkit damage event.
+     * This Bukkit-only signature is safe for optional reflection callers despite Adventure relocation.
+     */
+    public void displayVirtualDamage(org.bukkit.entity.LivingEntity victim, org.bukkit.entity.Entity attacker,
+                                     double damage, org.bukkit.event.entity.EntityDamageEvent.DamageCause cause) {
+        if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Damage indicators require the server thread");
+        damageIndicatorListener.displayDamage(victim, attacker, damage, cause);
+    }
+
     @Override
     public void onEnable() {
         instance = this;
