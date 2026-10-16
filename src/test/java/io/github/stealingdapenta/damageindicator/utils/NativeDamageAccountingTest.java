@@ -10,8 +10,6 @@ import static org.mockito.Mockito.when;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
-import org.bukkit.Keyed;
-import org.bukkit.Registry;
 import org.bukkit.damage.DamageSource;
 import org.bukkit.damage.DamageType;
 import org.bukkit.entity.LivingEntity;
@@ -20,21 +18,13 @@ import org.bukkit.event.entity.EntityDamageEvent.DamageModifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeAll;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Stream;
+import io.github.stealingdapenta.damageindicator.support.BukkitRegistries;
 
 class NativeDamageAccountingTest {
 
     @BeforeAll
     static void initializeRegistries() {
-        try (var bukkit = mockStatic(Bukkit.class)) {
-            bukkit.when(() -> Bukkit.getRegistry(any())).thenAnswer(invocation ->
-                    new TestRegistry<>(invocation.getArgument(0)));
-            Objects.requireNonNull(Registry.DAMAGE_TYPE);
-        }
+        BukkitRegistries.initialize();
     }
 
     private final LivingEntity victim = mock(LivingEntity.class);
@@ -157,32 +147,4 @@ class NativeDamageAccountingTest {
         assertEquals(3, NativeDamageAccounting.appliedDamage(event, victim));
     }
 
-    private static final class TestRegistry<T extends Keyed> implements Registry<T> {
-        private final Class<T> type;
-        private final Map<NamespacedKey, T> entries = new HashMap<>();
-
-        private TestRegistry(Class<T> type) {
-            this.type = type;
-        }
-
-        @Override
-        public T get(NamespacedKey key) {
-            return entries.computeIfAbsent(key, ignored -> mock(type));
-        }
-
-        @Override
-        public T getOrThrow(NamespacedKey key) {
-            return get(key);
-        }
-
-        @Override
-        public Stream<T> stream() {
-            return entries.values().stream();
-        }
-
-        @Override
-        public Iterator<T> iterator() {
-            return entries.values().iterator();
-        }
-    }
 }
