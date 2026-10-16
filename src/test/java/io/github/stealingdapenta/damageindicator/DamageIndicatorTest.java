@@ -159,6 +159,52 @@ class DamageIndicatorTest {
     }
 
     @Test
+    void asynchronousReloadIsRejectedBeforeReadingOrStoppingDisplays() throws Exception {
+        plugin.onEnable();
+        clearInvocations(health, names, damage);
+        Files.writeString(configFile, "enable_damage_indicator: [\n");
+        bukkit.when(Bukkit::isPrimaryThread)
+              .thenReturn(false);
+
+        assertThrows(IllegalStateException.class, plugin::reloadConfiguration);
+
+        assertTrue(ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean());
+        verify(names, never()).shutdown();
+        verify(health, never()).shutdown();
+        verify(damage, never()).shutdown();
+    }
+
+    @Test
+    void inheritedBukkitReloadAlsoAppliesTheValidatedRuntimeSnapshot() throws Exception {
+        plugin.onEnable();
+        clearInvocations(health, names, damage);
+        Files.writeString(configFile, "enable_damage_indicator: false\n");
+
+        plugin.reloadConfig();
+
+        assertFalse(ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean());
+        verify(names).shutdown();
+        verify(health).shutdown();
+        verify(damage).shutdown();
+        verify(health).refreshPersistedHolograms();
+        verify(names).refreshLoadedEntities();
+    }
+
+    @Test
+    void inheritedBukkitReloadPreservesDisplaysWhenTheFileIsMalformed() throws Exception {
+        plugin.onEnable();
+        clearInvocations(health, names, damage);
+        Files.writeString(configFile, "enable_damage_indicator: [\n");
+
+        assertThrows(ConfigurationLoadException.class, plugin::reloadConfig);
+
+        assertTrue(ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean());
+        verify(names, never()).shutdown();
+        verify(health, never()).shutdown();
+        verify(damage, never()).shutdown();
+    }
+
+    @Test
     void failedInitialLoadDoesNotRunWorldRestorationDuringDisable() throws Exception {
         Files.writeString(configFile, "enable_damage_indicator: [\n");
         assertThrows(ConfigurationLoadException.class, plugin::onEnable);

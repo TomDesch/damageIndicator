@@ -42,9 +42,7 @@ public class DamageIndicator extends JavaPlugin {
      * Displays already-applied custom HP damage without manufacturing a Bukkit damage event. This Bukkit-only signature is safe for optional reflection callers despite Adventure relocation.
      */
     public void displayVirtualDamage(LivingEntity victim, Entity attacker, double damage, DamageCause cause) {
-        if (!Bukkit.isPrimaryThread()) {
-            throw new IllegalStateException("Damage indicators require the server thread");
-        }
+        requireServerThread();
         if (!configured) {
             throw new IllegalStateException("DamageIndicator is not enabled");
         }
@@ -74,7 +72,21 @@ public class DamageIndicator extends JavaPlugin {
         getLogger().info("Damage Indicator plugin enabled.");
     }
 
+    @Override
+    public void reloadConfig() {
+        // Bukkit calls this during lazy getConfig() initialization, before our runtime is ready.
+        if (!configured) {
+            super.reloadConfig();
+            return;
+        }
+        reloadConfiguration();
+    }
+
+    /**
+     * Applies a validated disk snapshot on the server thread; unsaved getConfig() edits are discarded.
+     */
     public void reloadConfiguration() {
+        requireServerThread();
         CONFIGURATION_FILE_MANAGER.reloadConfig();
         customNamesListener.shutdown();
         healthBarListener.shutdown();
@@ -86,8 +98,15 @@ public class DamageIndicator extends JavaPlugin {
     }
 
     public void clearNameDisplays(LivingEntity entity) {
+        requireServerThread();
         healthBarListener.clearDisplay(entity, true);
         customNamesListener.clearDisplay(entity);
+    }
+
+    private void requireServerThread() {
+        if (!Bukkit.isPrimaryThread()) {
+            throw new IllegalStateException("DamageIndicator operations require the server thread");
+        }
     }
 
     private void logFeatureStates() {

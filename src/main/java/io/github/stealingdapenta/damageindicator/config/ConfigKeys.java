@@ -92,6 +92,16 @@ public enum ConfigKeys {
         return defaultValue;
     }
 
+    // Bukkit's native getters require defaults with their actual scalar types, not strings.
+    Object defaultConfigValue() {
+        return switch (valueType()) {
+            case BOOLEAN -> Boolean.parseBoolean(defaultValue);
+            case INTEGER -> Integer.parseInt(defaultValue);
+            case DECIMAL -> Double.parseDouble(defaultValue);
+            case COLOR, TEXT -> defaultValue;
+        };
+    }
+
     public String getConfigKey() {
         return name().toLowerCase(Locale.ROOT);
     }

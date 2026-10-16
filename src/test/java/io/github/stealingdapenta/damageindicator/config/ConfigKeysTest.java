@@ -36,7 +36,8 @@ class ConfigKeysTest {
         logger = mock(Logger.class);
         when(plugin.getLogger()).thenReturn(logger);
         instance = mockStatic(DamageIndicator.class);
-        instance.when(DamageIndicator::getInstance).thenReturn(plugin);
+        instance.when(DamageIndicator::getInstance)
+                .thenReturn(plugin);
         freshConfig();
     }
 
@@ -51,6 +52,14 @@ class ConfigKeysTest {
             assertNotNull(resource);
             config.load(new InputStreamReader(resource, StandardCharsets.UTF_8));
         }
+        Map<ConfigKeys, Object> bundledDefaults = new EnumMap<>(ConfigKeys.class);
+        for (ConfigKeys key : ConfigKeys.values()) {
+            String path = key.getConfigKey();
+            assertTrue(config.contains(path, true), "Bundled configuration must explicitly contain " + path);
+            Object value = config.get(path, null);
+            bundledDefaults.put(key, value);
+            assertNativeGetterValue(key, value);
+        }
         loadPreloaded();
         Map<ConfigKeys, String> bundled = strings();
 
@@ -58,6 +67,9 @@ class ConfigKeysTest {
         loadPreloaded();
 
         assertEquals(bundled, strings());
+        bundledDefaults.forEach(this::assertNativeGetterValue);
+        assertTrue(config.getBoolean("enable_damage_indicator"));
+        assertEquals(20, config.getInt("hologram_follow_speed"));
         assertFalse(ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean());
         assertFalse(ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean());
         assertTrue(HEALTH_BAR_ALWAYS_VISIBLE.asBoolean());
@@ -71,7 +83,8 @@ class ConfigKeysTest {
             freshConfig();
             config.set("enable_damage_indicator", value);
             loadPreloaded();
-            assertEquals(Boolean.parseBoolean(value.toString().trim()), ENABLE_DAMAGE_INDICATOR.asBoolean());
+            assertEquals(Boolean.parseBoolean(value.toString()
+                                                   .trim()), ENABLE_DAMAGE_INDICATOR.asBoolean());
             verifyNoInteractions(logger);
         }
         for (ConfigKeys key : List.of(ENABLE_DAMAGE_INDICATOR, ENABLE_HOLOGRAM_HEALTH_BAR)) {
@@ -84,8 +97,7 @@ class ConfigKeysTest {
 
     @Test
     void emptyAndMalformedYamlBooleanUseDefaultWithDiagnostics() throws Exception {
-        for (String yaml : List.of("enable_damage_indicator: ''", "enable_damage_indicator: 'yes'",
-                "enable_damage_indicator: []", "enable_damage_indicator: {enabled: true}")) {
+        for (String yaml : List.of("enable_damage_indicator: ''", "enable_damage_indicator: 'yes'", "enable_damage_indicator: []", "enable_damage_indicator: {enabled: true}")) {
             freshConfig();
             config.loadFromString(yaml);
             loadPreloaded();
@@ -96,8 +108,7 @@ class ConfigKeysTest {
 
     @Test
     void integerBoundsAreAppliedEvenWithoutCallerRangeHelpers() {
-        Map<ConfigKeys, Integer> maxima = Map.of(HEALTH_BAR_LENGTH, 100, HEALTH_BAR_DISPLAY_DURATION, 10,
-                HOLOGRAM_FOLLOW_SPEED, 200, DAMAGE_MERGE_JUMP_DURATION, 200);
+        Map<ConfigKeys, Integer> maxima = Map.of(HEALTH_BAR_LENGTH, 100, HEALTH_BAR_DISPLAY_DURATION, 10, HOLOGRAM_FOLLOW_SPEED, 200, DAMAGE_MERGE_JUMP_DURATION, 200);
         for (var entry : maxima.entrySet()) {
             ConfigKeys key = entry.getKey();
             for (int valid : List.of(1, entry.getValue())) {
@@ -108,8 +119,7 @@ class ConfigKeysTest {
                 assertEquals((double) valid, key.asDouble());
                 verifyNoInteractions(logger);
             }
-            for (Object value : List.of(-1, 0, entry.getValue() + 1, Integer.MAX_VALUE, Long.MAX_VALUE,
-                    "2147483648", "999999999999999999999999999999999999", "", "NaN", "3.0", 2.5, true, List.of(1))) {
+            for (Object value : List.of(-1, 0, entry.getValue() + 1, Integer.MAX_VALUE, Long.MAX_VALUE, "2147483648", "999999999999999999999999999999999999", "", "NaN", "3.0", 2.5, true, List.of(1))) {
                 invalid(key, value);
                 assertEquals(Integer.parseInt(key.getDefaultValue()), key.asInt(), key + ": " + value);
             }
@@ -133,9 +143,8 @@ class ConfigKeysTest {
                 assertEquals(value, key.asDouble(), key.toString());
                 verifyNoInteractions(logger);
             }
-            for (Object value : List.of(entry.getValue()[0] - 0.001, entry.getValue()[1] + 0.001,
-                    -1e300, 1e300, Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
-                    "NaN", "Infinity", "-Infinity", "1e309", "", "not a number", true, List.of(1))) {
+            for (Object value : List.of(entry.getValue()[0] - 0.001, entry.getValue()[1] + 0.001, -1e300, 1e300, Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, "NaN", "Infinity", "-Infinity", "1e309", "", "not a number", true,
+                                        List.of(1))) {
                 invalid(key, value);
                 assertEquals(Double.parseDouble(key.getDefaultValue()), key.asDouble(), key + ": " + value);
             }
@@ -144,9 +153,7 @@ class ConfigKeysTest {
 
     @Test
     void yamlNonfiniteNumbersAndWrongNumericTypesAreDiagnosed() throws Exception {
-        for (String yaml : List.of("damage_merge_timeout: .nan", "damage_merge_timeout: .inf",
-                "damage_merge_timeout: -.inf", "damage_merge_timeout: []",
-                "damage_merge_timeout: {seconds: 1}", "damage_merge_timeout: false")) {
+        for (String yaml : List.of("damage_merge_timeout: .nan", "damage_merge_timeout: .inf", "damage_merge_timeout: -.inf", "damage_merge_timeout: []", "damage_merge_timeout: {seconds: 1}", "damage_merge_timeout: false")) {
             freshConfig();
             config.loadFromString(yaml);
             loadPreloaded();
@@ -175,13 +182,11 @@ class ConfigKeysTest {
 
     @Test
     void invalidColorsAndFormattedColorSegmentsAreRejectedRatherThanWrappedOrDisplayedLiterally() {
-        for (Object value : List.of("", "red", "&(256,0,0)", "&(999,0,0)", "&(-1,0,0)", "&(1,2)",
-                "&(1,a,3)", "&(1,2,3) trailing", " ".repeat(65), 42, List.of(1, 2, 3))) {
+        for (Object value : List.of("", "red", "&(256,0,0)", "&(999,0,0)", "&(-1,0,0)", "&(1,2)", "&(1,a,3)", "&(1,2,3) trailing", " ".repeat(65), 42, List.of(1, 2, 3))) {
             invalid(MAGIC, value);
             assertEquals(TextColor.color(95, 10, 95), MAGIC.getTextColor(), value.toString());
         }
-        for (String value : List.of("HP &(256,0,0)x", "&(1,2)HP", "&(1,a,3)", "HP &(9999,2,3)",
-                "&(1,2,3)valid &(broken)")) {
+        for (String value : List.of("HP &(256,0,0)x", "&(1,2)HP", "&(1,a,3)", "HP &(9999,2,3)", "&(1,2,3)valid &(broken)")) {
             invalid(HEALTH_BAR_PREFIX, value);
             assertEquals("&(0,255,0)HP ", HEALTH_BAR_PREFIX.asString());
             assertNotNull(HEALTH_BAR_PREFIX.asFormattedString());
@@ -194,20 +199,21 @@ class ConfigKeysTest {
             freshConfig();
             config.set(key.getConfigKey(), "");
             loadPreloaded();
-            assertEquals("", key.asFormattedString().content());
+            assertEquals("", key.asFormattedString()
+                                .content());
             verifyNoInteractions(logger);
         }
         freshConfig();
         config.set("health_bar_prefix", "A & Z");
         loadPreloaded();
-        assertEquals("A & Z", HEALTH_BAR_PREFIX.asFormattedString().content());
+        assertEquals("A & Z", HEALTH_BAR_PREFIX.asFormattedString()
+                                               .content());
         verifyNoInteractions(logger);
     }
 
     @Test
     void individualTextLimitsAreEnforcedWhenCombinedOutputFits() {
-        Map<ConfigKeys, Integer> limits = Map.of(HEALTH_BAR_PREFIX, 256, HEALTH_BAR_SUFFIX, 256,
-                HEALTH_BAR_ALIVE_SYMBOL, 32, HEALTH_BAR_DEAD_SYMBOL, 32);
+        Map<ConfigKeys, Integer> limits = Map.of(HEALTH_BAR_PREFIX, 256, HEALTH_BAR_SUFFIX, 256, HEALTH_BAR_ALIVE_SYMBOL, 32, HEALTH_BAR_DEAD_SYMBOL, 32);
         for (var entry : limits.entrySet()) {
             ConfigKeys key = entry.getKey();
             int limit = entry.getValue();
@@ -218,7 +224,9 @@ class ConfigKeysTest {
             config.set(key.getConfigKey(), "x".repeat(limit));
             config.set("health_bar_length", 1);
             loadPreloaded();
-            assertEquals(limit, key.asFormattedString().content().length());
+            assertEquals(limit, key.asFormattedString()
+                                   .content()
+                                   .length());
             assertSame(key.asFormattedString(), key.asFormattedString());
             assertEquals(1, HEALTH_BAR_LENGTH.asInt());
             verifyNoInteractions(logger);
@@ -279,8 +287,7 @@ class ConfigKeysTest {
         config.set("health_bar_dead_symbol", "D");
         assertEquals(254, serializedBar(0).length());
         assertEquals(SERIALIZED_HEALTH_BAR_LIMIT, serializedBar(20).length());
-        assertTrue(serializedBar(10).length() > SERIALIZED_HEALTH_BAR_LIMIT,
-                "The bold-to-plain reset adds serialized characters");
+        assertTrue(serializedBar(10).length() > SERIALIZED_HEALTH_BAR_LIMIT, "The bold-to-plain reset adds serialized characters");
 
         loadPreloaded();
 
@@ -369,10 +376,12 @@ class ConfigKeysTest {
         DamageIndicator another = mock(DamageIndicator.class);
         when(another.getConfig()).thenReturn(config);
         when(another.getLogger()).thenReturn(logger);
-        instance.when(DamageIndicator::getInstance).thenReturn(another);
+        instance.when(DamageIndicator::getInstance)
+                .thenReturn(another);
         assertEquals(42, HEALTH_BAR_LENGTH.asInt());
 
-        instance.when(DamageIndicator::getInstance).thenReturn(plugin);
+        instance.when(DamageIndicator::getInstance)
+                .thenReturn(plugin);
         freshConfig();
         config.set("health_bar_length", 24);
         assertEquals(24, HEALTH_BAR_LENGTH.asInt());
@@ -401,6 +410,30 @@ class ConfigKeysTest {
             assertFalse(config.contains("enable_damage_ındıcator", true));
         } finally {
             Locale.setDefault(original);
+        }
+    }
+
+    private void assertNativeGetterValue(ConfigKeys key, Object expected) {
+        String path = key.getConfigKey();
+        Object value = config.get(path);
+        assertEquals(expected, value, path);
+        switch (key.valueType()) {
+            case BOOLEAN -> {
+                assertInstanceOf(Boolean.class, value, path);
+                assertEquals(expected, config.getBoolean(path), path);
+            }
+            case INTEGER -> {
+                assertInstanceOf(Integer.class, value, path);
+                assertEquals(expected, config.getInt(path), path);
+            }
+            case DECIMAL -> {
+                assertInstanceOf(Double.class, value, path);
+                assertEquals(expected, config.getDouble(path), path);
+            }
+            case COLOR, TEXT -> {
+                assertInstanceOf(String.class, value, path);
+                assertEquals(expected, config.getString(path), path);
+            }
         }
     }
 

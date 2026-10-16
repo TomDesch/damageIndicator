@@ -47,12 +47,9 @@ class ConfigurationFileManagerTest {
         when(plugin.getDataFolder()).thenReturn(directory.toFile());
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getLogger()).thenReturn(logger);
-        doAnswer(invocation -> {
-            config.save(file.toFile());
-            return null;
-        }).when(plugin).saveConfig();
         instance = mockStatic(DamageIndicator.class);
-        instance.when(DamageIndicator::getInstance).thenReturn(plugin);
+        instance.when(DamageIndicator::getInstance)
+                .thenReturn(plugin);
     }
 
     @AfterEach
@@ -61,22 +58,55 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void loadCopiesAllAuthoritativeDefaultsAndSavesWithoutWritingInvalidFallbacks() throws Exception {
+    void loadCopiesTypedDefaultsWithoutWritingInvalidFallbacksOrChangingTheFile() throws Exception {
         write("health_bar_length: -1\nunrelated_setting: preserved");
+        byte[] original = Files.readAllBytes(file);
 
         CONFIGURATION_FILE_MANAGER.loadConfig();
 
         verify(plugin).saveDefaultConfig();
-        verify(plugin).saveConfig();
+        verify(plugin, never()).saveConfig();
         verify(plugin, never()).reloadConfig();
-        assertTrue(config.options().copyDefaults());
+        assertTrue(config.options()
+                         .copyDefaults());
         for (ConfigKeys key : ConfigKeys.values()) {
             assertTrue(config.contains(key.getConfigKey()), key.toString());
         }
         assertEquals(16, HEALTH_BAR_LENGTH.asInt());
         assertEquals(-1, config.getInt("health_bar_length"));
-        assertTrue(Files.readString(file).contains("unrelated_setting: preserved"));
+        assertEquals(20, config.getInt("hologram_follow_speed"));
+        assertTrue(config.getBoolean("enable_damage_indicator"));
+        assertEquals(-0.3, config.getDouble("hologram_position"));
+        assertArrayEquals(original, Files.readAllBytes(file));
         verify(logger).warning(contains("'health_bar_length'"));
+    }
+
+    @Test
+    void enableAndReloadPreserveExactExistingFileBytesCommentsAndLineEndings() throws Exception {
+        for (String newline : List.of("\n", "\r\n")) {
+            String yaml = "# Operator notes: keep this header" + newline + newline + "hologram_follow_speed: 23 # Inline comment" + newline + "health_bar_prefix: 'custom HP '" + newline + "unrelated_setting: 'keep: this too'";
+            byte[] original = yaml.getBytes(StandardCharsets.UTF_8);
+            Files.write(file, original);
+            clearInvocations(plugin, logger);
+
+            CONFIGURATION_FILE_MANAGER.loadConfig();
+
+            assertArrayEquals(original, Files.readAllBytes(file));
+            assertEquals(23, HOLOGRAM_FOLLOW_SPEED.asInt());
+            assertEquals("custom HP ", HEALTH_BAR_PREFIX.asString());
+            config.set("hologram_follow_speed", 99);
+
+            CONFIGURATION_FILE_MANAGER.reloadConfig();
+
+            assertArrayEquals(original, Files.readAllBytes(file));
+            assertEquals(23, HOLOGRAM_FOLLOW_SPEED.asInt());
+            assertEquals(23, config.getInt("hologram_follow_speed"));
+            assertEquals("keep: this too", config.getString("unrelated_setting"));
+            verify(plugin).saveDefaultConfig();
+            verify(plugin, never()).saveConfig();
+            verify(plugin, never()).reloadConfig();
+            verifyNoInteractions(logger);
+        }
     }
 
     @Test
@@ -85,13 +115,15 @@ class ConfigurationFileManagerTest {
         doAnswer(invocation -> {
             write("hologram_follow_speed: 20\n# Bundled configuration");
             return null;
-        }).when(plugin).saveDefaultConfig();
+        }).when(plugin)
+          .saveDefaultConfig();
 
         CONFIGURATION_FILE_MANAGER.loadConfig();
 
         assertEquals(20, HOLOGRAM_FOLLOW_SPEED.asInt());
         assertTrue(Files.exists(file));
         verify(plugin).saveDefaultConfig();
+        verify(plugin, never()).saveConfig();
         verify(plugin, never()).reloadConfig();
         verifyNoInteractions(logger);
     }
@@ -99,8 +131,10 @@ class ConfigurationFileManagerTest {
     @Test
     void explicitLegacyValueWinsOverBundledCanonicalDefaultEvenWhenCopyDefaultsIsEnabled() throws Exception {
         write("dryout: '&(1,2,3)'");
+        byte[] original = Files.readAllBytes(file);
         config.addDefault("dry_out", "&(244,164,96)");
-        config.options().copyDefaults(true);
+        config.options()
+              .copyDefaults(true);
         assertFalse(config.contains("dry_out", true));
 
         CONFIGURATION_FILE_MANAGER.loadConfig();
@@ -108,7 +142,8 @@ class ConfigurationFileManagerTest {
         assertTrue(config.contains("dry_out", true));
         assertEquals("&(1,2,3)", config.getString("dry_out"));
         assertEquals(TextColor.color(1, 2, 3), DRY_OUT.getTextColor());
-        assertTrue(Files.readString(file).contains("dry_out:"));
+        assertArrayEquals(original, Files.readAllBytes(file), "Legacy migration must stay in memory");
+        verify(plugin, never()).saveConfig();
         verifyNoInteractions(logger);
     }
 
@@ -141,25 +176,24 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void loadAndReloadApplyIdenticalDefaultsMigrationValidationAndPersistence() throws Exception {
-        for (String yaml : List.of("", "dryout: '&(1,2,3)'",
-                "dryout: '&(1,2,3)'\ndry_out: ''",
-                "enable_hologram_health_bar: 'not true'\nhologram_follow_speed: 0",
-                "damage_merge_timeout: .inf\nhealth_bar_length: 99999999999",
-                "health_bar_prefix: '&(256,0,0)HP'")) {
+    void loadAndReloadApplyIdenticalDefaultsMigrationAndValidationWithoutWriting() throws Exception {
+        for (String yaml : List.of("", "dryout: '&(1,2,3)'", "dryout: '&(1,2,3)'\ndry_out: ''", "enable_hologram_health_bar: 'not true'\nhologram_follow_speed: 0", "damage_merge_timeout: .inf\nhealth_bar_length: 99999999999",
+                                   "health_bar_prefix: '&(256,0,0)HP'")) {
             write(yaml);
+            byte[] original = Files.readAllBytes(file);
             CONFIGURATION_FILE_MANAGER.loadConfig();
             Map<ConfigKeys, String> enabledValues = strings();
-            byte[] enabledYaml = Files.readAllBytes(file);
+            assertArrayEquals(original, Files.readAllBytes(file), yaml);
+            verify(plugin, never()).saveConfig();
             clearInvocations(plugin, logger);
             write(yaml);
 
             CONFIGURATION_FILE_MANAGER.reloadConfig();
 
             assertEquals(enabledValues, strings(), yaml);
-            assertArrayEquals(enabledYaml, Files.readAllBytes(file), yaml);
+            assertArrayEquals(original, Files.readAllBytes(file), yaml);
             verify(plugin, never()).reloadConfig();
-            verify(plugin).saveConfig();
+            verify(plugin, never()).saveConfig();
             verify(plugin, never()).saveDefaultConfig();
         }
     }
@@ -213,18 +247,17 @@ class ConfigurationFileManagerTest {
         write("hologram_follow_speed: 15\nhealth_bar_prefix: 'old prefix'\ndryout: '&(1,2,3)'");
         CONFIGURATION_FILE_MANAGER.loadConfig();
         var oldComponent = HEALTH_BAR_PREFIX.asFormattedString();
-        for (String malformed : List.of("# untouched CRLF\r\nhologram_follow_speed: [20\r\n",
-                "hologram_follow_speed: 45\nbroken: {unterminated\n", "- not a mapping\n- still not a mapping\n")) {
+        for (String malformed : List.of("# untouched CRLF\r\nhologram_follow_speed: [20\r\n", "hologram_follow_speed: 45\nbroken: {unterminated\n", "- not a mapping\n- still not a mapping\n")) {
             byte[] original = malformed.getBytes(StandardCharsets.UTF_8);
             Files.write(file, original);
             clearInvocations(plugin, logger);
             String previousConfig = config.saveToString();
 
-            ConfigurationLoadException failure = assertThrows(ConfigurationLoadException.class,
-                    CONFIGURATION_FILE_MANAGER::reloadConfig);
+            ConfigurationLoadException failure = assertThrows(ConfigurationLoadException.class, CONFIGURATION_FILE_MANAGER::reloadConfig);
 
             assertInstanceOf(InvalidConfigurationException.class, failure.getCause());
-            assertTrue(failure.getMessage().contains("config.yml"));
+            assertTrue(failure.getMessage()
+                              .contains("config.yml"));
             assertArrayEquals(original, Files.readAllBytes(file));
             verify(plugin, never()).getConfig();
             verify(plugin, never()).reloadConfig();
@@ -272,8 +305,7 @@ class ConfigurationFileManagerTest {
         clearInvocations(plugin, logger);
         String previousConfig = config.saveToString();
 
-        ConfigurationLoadException failure = assertThrows(ConfigurationLoadException.class,
-                CONFIGURATION_FILE_MANAGER::reloadConfig);
+        ConfigurationLoadException failure = assertThrows(ConfigurationLoadException.class, CONFIGURATION_FILE_MANAGER::reloadConfig);
 
         assertInstanceOf(IOException.class, failure.getCause());
         assertArrayEquals(invalidUtf8, Files.readAllBytes(file));
@@ -302,11 +334,12 @@ class ConfigurationFileManagerTest {
     }
 
     @Test
-    void validSingleReadContentsAreAppliedInsteadOfReadingDiskAgainDuringCommit() throws Exception {
+    void reloadCommitsValidatedCandidateWithoutRereadingOrOverwritingConcurrentEdit() throws Exception {
         CONFIGURATION_FILE_MANAGER.loadConfig();
         write("hologram_follow_speed: 37");
+        byte[] concurrentEdit = "# Edited after candidate read\r\nhologram_follow_speed: [broken\r\n".getBytes(StandardCharsets.UTF_8);
         when(plugin.getConfig()).thenAnswer(invocation -> {
-            write("hologram_follow_speed: [broken");
+            Files.write(file, concurrentEdit);
             return config;
         });
 
@@ -314,30 +347,34 @@ class ConfigurationFileManagerTest {
 
         assertEquals(37, config.getInt("hologram_follow_speed"));
         // Avoid the deliberately side-effectful plugin getter while inspecting the committed result.
-        doReturn(config).when(plugin).getConfig();
+        doReturn(config).when(plugin)
+                        .getConfig();
         assertEquals(37, HOLOGRAM_FOLLOW_SPEED.asInt());
-        assertTrue(Files.readString(file).contains("hologram_follow_speed: 37"));
+        assertArrayEquals(concurrentEdit, Files.readAllBytes(file));
         verify(plugin, never()).reloadConfig();
+        verify(plugin, never()).saveConfig();
         verifyNoInteractions(logger);
     }
 
     @Test
     void enableAndReloadApplySameBoundedAppearanceFallbackWhileKeepingConfiguredLength() throws Exception {
-        String input = "health_bar_length: 100\nhealth_bar_prefix: 'custom prefix'\nhealth_bar_suffix: 'custom suffix'\n"
-                + "health_bar_alive_symbol: '&(1,2,3)A&(4,5,6)B'\nhealth_bar_dead_symbol: 'D'\n";
+        String input = "health_bar_length: 100\nhealth_bar_prefix: 'custom prefix'\nhealth_bar_suffix: 'custom suffix'\n" + "health_bar_alive_symbol: '&(1,2,3)A&(4,5,6)B'\nhealth_bar_dead_symbol: 'D'\n";
         write(input);
         CONFIGURATION_FILE_MANAGER.loadConfig();
         List<String> enabledBars = IntStream.rangeClosed(0, 100)
-                .mapToObj(ConfigurationTestSupport::serializedBar).toList();
+                                            .mapToObj(ConfigurationTestSupport::serializedBar)
+                                            .toList();
         assertEquals(100, HEALTH_BAR_LENGTH.asInt());
-        assertTrue(enabledBars.stream().allMatch(bar -> bar.length() <= SERIALIZED_HEALTH_BAR_LIMIT));
+        assertTrue(enabledBars.stream()
+                              .allMatch(bar -> bar.length() <= SERIALIZED_HEALTH_BAR_LIMIT));
         verify(logger).warning(contains("256 UTF-16"));
         write(input);
 
         CONFIGURATION_FILE_MANAGER.reloadConfig();
 
         assertEquals(enabledBars, IntStream.rangeClosed(0, 100)
-                .mapToObj(ConfigurationTestSupport::serializedBar).toList());
+                                           .mapToObj(ConfigurationTestSupport::serializedBar)
+                                           .toList());
         assertEquals(100, HEALTH_BAR_LENGTH.asInt());
         assertEquals("&(1,2,3)A&(4,5,6)B", config.getString("health_bar_alive_symbol"));
         assertEquals(HEALTH_BAR_PREFIX.getDefaultValue(), HEALTH_BAR_PREFIX.asString());

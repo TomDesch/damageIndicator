@@ -17,7 +17,7 @@ public enum ConfigurationFileManager {
     private static final int MAXIMUM_FAILURE_REASON_LENGTH = 1024;
 
     /**
-     * Loads and validates the complete file before changing any active configuration.
+     * Loads and validates the complete file before changing any active configuration. Existing operator files are never rewritten.
      *
      * @throws ConfigurationLoadException if the file cannot be read or parsed
      */
@@ -48,7 +48,6 @@ public enum ConfigurationFileManager {
         active.options()
               .copyDefaults(true);
         ConfigKeys.install(replacement.withSource(active));
-        plugin.saveConfig();
     }
 
     private YamlConfiguration readConfiguration(JavaPlugin plugin, Path path) {
@@ -70,7 +69,7 @@ public enum ConfigurationFileManager {
     private void normalize(FileConfiguration config) {
         for (ConfigKeys key : ConfigKeys.values()) {
             migrateLegacyValue(config, key);
-            config.addDefault(key.getConfigKey(), key.getDefaultValue());
+            config.addDefault(key.getConfigKey(), key.defaultConfigValue());
         }
 
         config.options()
@@ -90,7 +89,7 @@ public enum ConfigurationFileManager {
     }
 
     /**
-     * Reloads the file transactionally, retaining the previous configuration on read or syntax failure.
+     * Reloads without writing to disk, retaining the previous configuration on read or syntax failure.
      *
      * @throws ConfigurationLoadException if the file cannot be read or parsed
      */
