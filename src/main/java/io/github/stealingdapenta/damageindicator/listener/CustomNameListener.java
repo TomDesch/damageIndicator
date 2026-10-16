@@ -152,11 +152,10 @@ public class CustomNameListener implements Listener {
                 } else if (!display.stand.isValid()) {
                     removeDisplay(id);
                     restoreCustomNameVisibility(entity);
-                } else if (entity.getCustomName() == null || !eligible(entity)) {
+                } else if (!eligible(entity)) {
                     clearDisplay(entity);
                 } else {
-                    refreshName(entity, display);
-                    if (!HOLOGRAPH_UTIL.teleportIfMoved(display.stand,
+                    if (refreshName(entity, display) && !HOLOGRAPH_UTIL.teleportIfMoved(display.stand,
                             HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()))) {
                         clearDisplay(entity);
                     }
@@ -189,13 +188,19 @@ public class CustomNameListener implements Listener {
         }
     }
 
-    private void refreshName(LivingEntity entity, NameDisplay display) {
+    private boolean refreshName(LivingEntity entity, NameDisplay display) {
         String name = entity.getCustomName();
+        if (name == null) {
+            removeDisplay(entity.getUniqueId());
+            restoreCustomNameVisibility(entity);
+            return false;
+        }
         if (!Objects.equals(name, display.name)) {
             display.stand.setCustomName(name);
             display.name = name;
         }
         entity.setCustomNameVisible(false);
+        return true;
     }
 
     void restoreCustomNameVisibility(LivingEntity entity) {
@@ -225,6 +230,7 @@ public class CustomNameListener implements Listener {
     void recoverAndReplaceCustomName(LivingEntity entity) {
         NameDisplay active = activeNames.get(entity.getUniqueId());
         if (active != null && active.stand.isValid()) {
+            refreshName(entity, active);
             return;
         }
         removeDisplay(entity.getUniqueId());

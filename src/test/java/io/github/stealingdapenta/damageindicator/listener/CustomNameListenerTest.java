@@ -247,6 +247,11 @@ class CustomNameListenerTest {
         assertFalse(stands.getFirst().valid.get());
         assertTrue(mob.visible.get());
         assertFalse(mob.data.containsKey("custom-name-hidden"));
+        mob.name.set("Named again");
+        advance(20);
+        assertEquals(2, stands.size());
+        assertEquals("Named again", stands.getLast().name.get());
+        assertFalse(mob.visible.get());
     }
 
     private MobState mob(String name, boolean visible) {
