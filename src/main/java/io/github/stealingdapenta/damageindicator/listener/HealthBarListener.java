@@ -1,7 +1,7 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
-import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HEALTH_BAR;
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_ALWAYS_VISIBLE;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HEALTH_BAR_DEAD_SYMBOL;
@@ -15,7 +15,7 @@ import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLO
 import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
+import io.github.stealingdapenta.damageindicator.utils.NativeDamageAccounting;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,398 +24,415 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.entity.EntityResurrectEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
- * Listens to damage and death events and displays dynamic health bars (as floating holograms or custom names) above entities based on plugin config.
+ * Activation-based health bars. A single next-tick heartbeat reads committed health and follows active displays; neither the scheduler nor the tracking maps retain entity wrappers. Inline bars intentionally exclude players, whose nameplates are not
+ * custom names.
  */
 public class HealthBarListener implements Listener {
 
-    private static final int TICKS_PER_SECOND = 20;
-    private static final int MIN_SECONDS = 1;
-    private static final int MAX_SECONDS = 10;
-    private static final int MAX_HEALTH_BAR_LENGTH = 100;
-    private static final NamespacedKey ORIGINAL_NAME_MARKER_KEY = new NamespacedKey("damageindicator", "health-name-overridden");
-    private static final NamespacedKey ORIGINAL_NAME_KEY = new NamespacedKey("damageindicator", "health-original-name");
-    private static final NamespacedKey ORIGINAL_NAME_VISIBLE_KEY = new NamespacedKey("damageindicator", "health-original-visible");
-    private static final NamespacedKey ALWAYS_VISIBLE_HOLOGRAM_KEY = new NamespacedKey("damageindicator", "always-visible-health-hologram");
+    private static final NamespacedKey ORIGINAL_MARKER = key("health-name-overridden");
+    private static final NamespacedKey ORIGINAL_NAME = key("health-original-name");
+    private static final NamespacedKey ORIGINAL_VISIBLE = key("health-original-visible");
+    private static final NamespacedKey LAST_OVERLAY = key("health-last-overlay");
+    private static final NamespacedKey ACTIVATED = key("health-bar-activated");
+    private static final NamespacedKey LEGACY_ACTIVATED = key("always-visible-health-hologram");
 
-    private final Map<LivingEntity, BukkitTask> entitiesWithActiveHealthBars = new HashMap<>();
-    private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHologramBars = new HashMap<>();
-    private final Map<UUID, OriginalNameState> originalEntityNames = new HashMap<>();
-    private final Set<BukkitTask> pendingHealTasks = new HashSet<>();
+    private final Map<UUID, ActiveBar> activeBars = new HashMap<>();
+    private final Set<UUID> pendingRefreshes = new HashSet<>();
+    private final Set<UUID> pendingRecoveries = new HashSet<>();
+    private BukkitTask heartbeat;
+    private long tick;
+    private boolean stopped;
 
-    /**
-     * Displays the health bar after an entity takes damage.
-     */
+    private static NamespacedKey key(String value) {
+        return new NamespacedKey("damageindicator", value);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
-        if (!ENABLE_HEALTH_BAR.asBoolean()) {
-            return;
-        }
-
-        if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
-            return;
-        }
-
-        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
-                                  .getValue();
-        double currentHealth = resolveDisplayHealth(livingEntity, event.getFinalDamage(), maxHealth);
-        Component name = createHealthBar(currentHealth, maxHealth);
-
-        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-            displayHolographicHealthBar(livingEntity, name);
-        } else {
-            displayCustomNameHealthBar(livingEntity, name);
+        if (!event.isCancelled() && event.getEntity() instanceof LivingEntity entity && ENABLE_HEALTH_BAR.asBoolean() && NativeDamageAccounting.appliedDamage(event, entity) > 0) {
+            queueRefresh(entity);
         }
     }
 
-    /**
-     * Updates the health bar when an entity regains health.
-     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void updateHealthBarOnHeal(EntityRegainHealthEvent event) {
-        if (!ENABLE_HEALTH_BAR.asBoolean()) {
-            return;
+        if (!event.isCancelled() && event.getEntity() instanceof LivingEntity entity && ENABLE_HEALTH_BAR.asBoolean() && Double.isFinite(event.getAmount()) && event.getAmount() > 0 && (activeBars.containsKey(entity.getUniqueId())
+                || HEALTH_BAR_ALWAYS_VISIBLE.asBoolean())) {
+            queueRefresh(entity);
         }
-
-        if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
-            return;
-        }
-
-        boolean hasActiveBar = ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean() ? entitiesWithActiveHologramBars.containsKey(livingEntity) : entitiesWithActiveHealthBars.containsKey(livingEntity);
-
-        if (!hasActiveBar && !HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
-            return; // respect visibility rules
-        }
-
-        // Defer one tick so the healing is fully applied before we read health.
-        BukkitTask[] taskHolder = new BukkitTask[1];
-        BukkitTask pendingTask = DamageIndicator.getInstance()
-                                                .getServer()
-                                                .getScheduler()
-                                                .runTask(DamageIndicator.getInstance(), () -> {
-                                                    try {
-                                                        if (!ENABLE_HEALTH_BAR.asBoolean() || !livingEntity.isValid()) {
-                                                            return;
-                                                        }
-                                                        double maxHealth = Objects.requireNonNull(livingEntity.getAttribute(Attribute.MAX_HEALTH))
-                                                                                  .getValue();
-                                                        double currentHealth = Math.min(livingEntity.getHealth(), maxHealth);
-                                                        Component name = createHealthBar(currentHealth, maxHealth);
-
-                                                        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-                                                            displayHolographicHealthBar(livingEntity, name);
-                                                        } else {
-                                                            displayCustomNameHealthBar(livingEntity, name);
-                                                        }
-                                                    } finally {
-                                                        pendingHealTasks.remove(taskHolder[0]);
-                                                    }
-                                                });
-        taskHolder[0] = pendingTask;
-        pendingHealTasks.add(pendingTask);
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void updateHealthBarOnResurrection(EntityResurrectEvent event) {
+        if (!event.isCancelled() && ENABLE_HEALTH_BAR.asBoolean()) {
+            queueRefresh(event.getEntity());
+        }
+    }
+
+    private void queueRefresh(LivingEntity entity) {
+        if (stopped || entity instanceof Player && !ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+            return;
+        }
+        pendingRefreshes.add(entity.getUniqueId());
+        ensureHeartbeat();
+    }
+
+    private void ensureHeartbeat() {
+        if (!stopped && heartbeat == null) {
+            heartbeat = Bukkit.getScheduler()
+                              .runTaskTimer(DamageIndicator.getInstance(), this::heartbeat, 1, 1);
+        }
+    }
+
+    private void heartbeat() {
+        tick++;
+        for (UUID id : new ArrayList<>(pendingRecoveries)) {
+            pendingRecoveries.remove(id);
+            if (Bukkit.getEntity(id) instanceof LivingEntity entity) {
+                recover(entity);
+            }
+        }
+        for (UUID id : new ArrayList<>(pendingRefreshes)) {
+            pendingRefreshes.remove(id);
+            if (Bukkit.getEntity(id) instanceof LivingEntity entity && canDisplay(entity)) {
+                activate(entity);
+            }
+        }
+        for (UUID id : new ArrayList<>(activeBars.keySet())) {
+            ActiveBar bar = activeBars.get(id);
+            if (!(Bukkit.getEntity(id) instanceof LivingEntity entity)) {
+                detach(id);
+            } else if (!ENABLE_HEALTH_BAR.asBoolean()) {
+                clearDisplay(entity, true);
+            } else if (!canDisplay(entity)) {
+                clearDisplay(entity, entity.isDead());
+            } else if (!HEALTH_BAR_ALWAYS_VISIBLE.asBoolean() && tick >= bar.expiresAt) {
+                clearDisplay(entity, false);
+            } else if (tick >= bar.nextFollow) {
+                render(entity, bar);
+            }
+        }
+        stopHeartbeatIfIdle();
+    }
+
+    private boolean canDisplay(LivingEntity entity) {
+        return !stopped && ENABLE_HEALTH_BAR.asBoolean() && entity.isValid() && !entity.isDead() && (!(entity instanceof Player) || ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean());
+    }
+
+    private void activate(LivingEntity entity) {
+        ActiveBar bar = activeBars.computeIfAbsent(entity.getUniqueId(), ignored -> new ActiveBar());
+        bar.expiresAt = tick + 20L * HEALTH_BAR_DISPLAY_DURATION.asIntBetween(1, 10);
+        entity.getPersistentDataContainer()
+              .set(ACTIVATED, PersistentDataType.BOOLEAN, true);
+        entity.getPersistentDataContainer()
+              .remove(LEGACY_ACTIVATED);
+        render(entity, bar);
+    }
+
+    private void render(LivingEntity entity, ActiveBar bar) {
+        AttributeInstance attribute = entity.getAttribute(Attribute.MAX_HEALTH);
+        double max = attribute == null ? Double.NaN : attribute.getValue();
+        if (!Double.isFinite(max) || max <= 0) {
+            DamageIndicator.getInstance()
+                           .getLogger()
+                           .warning("Cannot display health bar for " + entity.getUniqueId() + ": missing or invalid MAX_HEALTH (" + max + ").");
+            clearDisplay(entity, false);
+            return;
+        }
+        double health = entity.getHealth();
+        if (!Double.isFinite(health)) {
+            DamageIndicator.getInstance()
+                           .getLogger()
+                           .warning("Cannot display health bar for " + entity.getUniqueId() + ": non-finite health (" + health + ").");
+            clearDisplay(entity, false);
+            return;
+        }
+        String name = TEXT_UTIL.serializeComponent(createHealthBar(Math.clamp(health, 0, max), max));
+        bar.nextFollow = tick + HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1);
+        if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+            restoreOwnedName(entity);
+            Entity existing = bar.hologram == null ? null : Bukkit.getEntity(bar.hologram);
+            if (!(existing instanceof ArmorStand stand) || !stand.isValid()) {
+                ArmorStand created = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
+                bar.hologram = created.getUniqueId();
+                UUID ownerId = entity.getUniqueId();
+                HOLOGRAPH_UTIL.onCleanup(created, () -> {
+                    if (Bukkit.getEntity(ownerId) instanceof LivingEntity owner) {
+                        clearDisplay(owner, true);
+                    } else {
+                        pendingRefreshes.remove(ownerId);
+                        pendingRecoveries.remove(ownerId);
+                        detach(ownerId);
+                        stopHeartbeatIfIdle();
+                    }
+                });
+            } else {
+                if (!Objects.equals(stand.getCustomName(), name)) {
+                    stand.setCustomName(name);
+                }
+                if (!HOLOGRAPH_UTIL.teleportIfMoved(stand, HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()))) {
+                    clearDisplay(entity, false);
+                }
+            }
+        } else {
+            removeHologram(bar);
+            writeOwnedName(entity, name);
+        }
+    }
+
+    private void writeOwnedName(LivingEntity entity, String overlay) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        if (hasLegacyOriginal(data)) {
+            restoreOwnedName(entity);
+        }
+        // A name tag or another plugin can replace our last overlay at any time.
+        if (!ownsCurrentName(entity)) {
+            data.set(ORIGINAL_MARKER, PersistentDataType.BOOLEAN, true);
+            data.set(ORIGINAL_VISIBLE, PersistentDataType.BOOLEAN, entity.isCustomNameVisible());
+            String original = entity.getCustomName();
+            if (original == null) {
+                data.remove(ORIGINAL_NAME);
+            } else {
+                data.set(ORIGINAL_NAME, PersistentDataType.STRING, original);
+            }
+        } else if (!entity.isCustomNameVisible()) {
+            data.set(ORIGINAL_VISIBLE, PersistentDataType.BOOLEAN, false);
+        }
+        if (!Objects.equals(entity.getCustomName(), overlay)) {
+            entity.setCustomName(overlay);
+        }
+        // Spigot may canonicalize/truncate the name, or turn an empty string into null.
+        data.set(LAST_OVERLAY, PersistentDataType.STRING, normalizedName(entity.getCustomName()));
+        if (!entity.isCustomNameVisible()) {
+            entity.setCustomNameVisible(true);
+        }
+    }
+
+    private boolean ownsCurrentName(LivingEntity entity) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        String last = data.get(LAST_OVERLAY, PersistentDataType.STRING);
+        return last != null && Boolean.TRUE.equals(data.get(ORIGINAL_MARKER, PersistentDataType.BOOLEAN)) && last.equals(normalizedName(entity.getCustomName()));
+    }
+
+    private String normalizedName(String name) {
+        return name == null ? "" : name;
+    }
+
+    private boolean hasLegacyOriginal(PersistentDataContainer data) {
+        return Boolean.TRUE.equals(data.get(ORIGINAL_MARKER, PersistentDataType.BOOLEAN)) && data.get(LAST_OVERLAY, PersistentDataType.STRING) == null;
+    }
+
+    private void restoreOwnedName(LivingEntity entity) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        boolean legacy = hasLegacyOriginal(data);
+        if (!(entity instanceof Player) && (legacy || ownsCurrentName(entity))) {
+            entity.setCustomName(data.get(ORIGINAL_NAME, PersistentDataType.STRING));
+            if (legacy || entity.isCustomNameVisible()) {
+                entity.setCustomNameVisible(Boolean.TRUE.equals(data.get(ORIGINAL_VISIBLE, PersistentDataType.BOOLEAN)));
+            }
+        }
+        data.remove(ORIGINAL_MARKER);
+        data.remove(ORIGINAL_NAME);
+        data.remove(ORIGINAL_VISIBLE);
+        data.remove(LAST_OVERLAY);
+    }
 
     /**
-     * Handles entity death to clear health bars or restore names.
+     * Detaches pending/active displays and restores only an inline name that we still own. Call before an administrative name wipe; clearing activation prevents later recovery.
      */
+    public void clearDisplay(LivingEntity entity, boolean clearActivation) {
+        UUID id = entity.getUniqueId();
+        pendingRefreshes.remove(id);
+        pendingRecoveries.remove(id);
+        detach(id);
+        restoreOwnedName(entity);
+        if (clearActivation) {
+            entity.getPersistentDataContainer()
+                  .remove(ACTIVATED);
+            entity.getPersistentDataContainer()
+                  .remove(LEGACY_ACTIVATED);
+        }
+        stopHeartbeatIfIdle();
+    }
+
+    private void detach(UUID id) {
+        ActiveBar bar = activeBars.remove(id);
+        if (bar != null) {
+            removeHologram(bar);
+        }
+    }
+
+    private void removeHologram(ActiveBar bar) {
+        UUID id = bar.hologram;
+        bar.hologram = null;
+        if (id != null && Bukkit.getEntity(id) instanceof ArmorStand stand) {
+            HOLOGRAPH_UTIL.remove(stand);
+        }
+    }
+
+    private void stopHeartbeatIfIdle() {
+        if (activeBars.isEmpty() && pendingRefreshes.isEmpty() && pendingRecoveries.isEmpty() && heartbeat != null) {
+            heartbeat.cancel();
+            heartbeat = null;
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void handleDeathEvents(EntityDeathEvent event) {
-        removeHologramsUponDeath(event);
-        restoreNameUponDeath(event);
+        clearDisplay(event.getEntity(), true);
     }
 
     @EventHandler(priority = EventPriority.LOW)
-    public void restoreNamesOnChunkLoad(ChunkLoadEvent event) {
-        LivingEntity[] entities = java.util.Arrays.stream(event.getChunk()
-                                                               .getEntities())
-                        .filter(LivingEntity.class::isInstance)
-                        .map(LivingEntity.class::cast)
-                        .toArray(LivingEntity[]::new);
-        java.util.Arrays.stream(entities)
-                        .filter(this::hasPersistedOriginalName)
-                        .forEach(this::recoverNameOnChunkLoad);
-        java.util.Arrays.stream(entities)
-                        .filter(this::hasPersistedAlwaysVisibleHologram)
-                        .forEach(this::restorePersistedHologram);
-    }
-
-    private void displayHolographicHealthBar(LivingEntity entity, Component name) {
-        if (HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
-            entity.getPersistentDataContainer()
-                  .set(ALWAYS_VISIBLE_HOLOGRAM_KEY, PersistentDataType.BOOLEAN, true);
-        } else {
-            entity.getPersistentDataContainer()
-                  .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
-        }
-        HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars);
-        LivingEntityTaskInfo taskInfo = spawnHologramBar(entity, name);
-        entitiesWithActiveHologramBars.put(entity, taskInfo);
-    }
-
-    private void displayCustomNameHealthBar(LivingEntity entity, Component name) {
-        entity.getPersistentDataContainer()
-              .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
-        BukkitTask oldTask = entitiesWithActiveHealthBars.remove(entity);
-        if (oldTask != null && !oldTask.isCancelled()) {
-            oldTask.cancel();
-        }
-
-        rememberOriginalName(entity);
-
-        entity.setCustomName(TEXT_UTIL.serializeComponent(name));
-        entity.setCustomNameVisible(true);
-
-        if (!HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
-            BukkitTask resetTask = scheduleNameReset(entity);
-            entitiesWithActiveHealthBars.put(entity, resetTask);
-        }
-    }
-
-    private void restoreNameUponDeath(EntityDeathEvent event) {
-        LivingEntity entity = event.getEntity();
-        BukkitTask task = entitiesWithActiveHealthBars.remove(entity);
-        if (task != null && !task.isCancelled()) {
-            task.cancel();
-        }
-        resetEntityName(entity);
-    }
-
-    private void removeHologramsUponDeath(EntityDeathEvent event) {
-        event.getEntity()
-             .getPersistentDataContainer()
-             .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
-        HOLOGRAPH_UTIL.cancelHologramFor(event.getEntity(), entitiesWithActiveHologramBars);
-    }
-
-    private BukkitTask scheduleNameReset(LivingEntity entity) {
-        return new BukkitRunnable() {
-            @Override
-            public void run() {
-                resetEntityName(entity);
-                entitiesWithActiveHealthBars.remove(entity);
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            if (entity instanceof LivingEntity living) {
+                recover(living);
             }
-
-            @Override
-            public synchronized void cancel() throws IllegalStateException {
-                resetEntityName(entity);
-                entitiesWithActiveHealthBars.remove(entity);
-                super.cancel();
-            }
-        }.runTaskLater(DamageIndicator.getInstance(), getDisplayDurationInTicks());
+        }
     }
 
-    void resetEntityName(LivingEntity entity) {
-        OriginalNameState originalName = originalEntityNames.remove(entity.getUniqueId());
-        if (originalName == null) {
-            originalName = readPersistedOriginalName(entity);
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntitiesUnload(EntitiesUnloadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            if (entity instanceof LivingEntity living) {
+                clearDisplay(living, !ENABLE_HEALTH_BAR.asBoolean());
+            }
         }
-        if (originalName == null) {
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntityRemove(EntityRemoveEvent event) {
+        // Bukkit forbids modifying the removed entity; its persisted data is recovered on load.
+        UUID id = event.getEntity()
+                       .getUniqueId();
+        pendingRefreshes.remove(id);
+        pendingRecoveries.remove(id);
+        detach(id);
+        stopHeartbeatIfIdle();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        clearDisplay(event.getPlayer(), !ENABLE_HEALTH_BAR.asBoolean());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        if (!stopped) {
+            pendingRecoveries.add(event.getPlayer()
+                                       .getUniqueId());
+            ensureHeartbeat();
+        }
+    }
+
+    private void recover(LivingEntity entity) {
+        if (stopped) {
             return;
         }
-
-        entity.setCustomName(TEXT_UTIL.serializeComponent(originalName.name()));
-        entity.setCustomNameVisible(originalName.visible());
-        clearPersistedOriginalName(entity);
-    }
-
-    private void rememberOriginalName(LivingEntity entity) {
-        OriginalNameState originalName = readPersistedOriginalName(entity);
-        if (originalName == null) {
-            originalName = new OriginalNameState(TEXT_UTIL.deserializeComponent(entity.getCustomName()), entity.isCustomNameVisible());
-            persistOriginalName(entity, originalName);
+        PersistentDataContainer data = entity.getPersistentDataContainer();
+        if (Boolean.TRUE.equals(data.get(LEGACY_ACTIVATED, PersistentDataType.BOOLEAN))) {
+            data.set(ACTIVATED, PersistentDataType.BOOLEAN, true);
+            data.remove(LEGACY_ACTIVATED);
         }
-        originalEntityNames.putIfAbsent(entity.getUniqueId(), originalName);
-    }
-
-    void recoverNameOnChunkLoad(LivingEntity entity) {
-        Map.Entry<LivingEntity, BukkitTask> staleReset = entitiesWithActiveHealthBars.entrySet()
-                                                                                    .stream()
-                                                                                    .filter(entry -> entry.getKey()
-                                                                                                          .getUniqueId()
-                                                                                                          .equals(entity.getUniqueId()))
-                                                                                    .findFirst()
-                                                                                    .orElse(null);
-        if (staleReset != null) {
-            resetEntityName(entity);
-            entitiesWithActiveHealthBars.remove(staleReset.getKey());
-            if (!staleReset.getValue().isCancelled()) {
-                staleReset.getValue().cancel();
+        boolean activated = Boolean.TRUE.equals(data.get(ACTIVATED, PersistentDataType.BOOLEAN));
+        if (activeBars.containsKey(entity.getUniqueId())) {
+            if (!ENABLE_HEALTH_BAR.asBoolean()) {
+                clearDisplay(entity, true);
             }
             return;
         }
-
-        if (!originalEntityNames.containsKey(entity.getUniqueId())) {
-            resetEntityName(entity);
+        restoreOwnedName(entity);
+        if (!ENABLE_HEALTH_BAR.asBoolean()) {
+            data.remove(ACTIVATED);
+        } else if (activated && HEALTH_BAR_ALWAYS_VISIBLE.asBoolean() && canDisplay(entity)) {
+            activate(entity);
+            ensureHeartbeat();
         }
     }
 
     public void shutdown() {
-        new ArrayList<>(pendingHealTasks).forEach(task -> {
-            if (!task.isCancelled()) {
-                task.cancel();
+        stopped = true;
+        if (heartbeat != null) {
+            heartbeat.cancel();
+            heartbeat = null;
+        }
+        pendingRefreshes.clear();
+        pendingRecoveries.clear();
+        for (UUID id : new ArrayList<>(activeBars.keySet())) {
+            if (Bukkit.getEntity(id) instanceof LivingEntity entity) {
+                clearDisplay(entity, !ENABLE_HEALTH_BAR.asBoolean());
+            } else {
+                detach(id);
             }
-        });
-        pendingHealTasks.clear();
-
-        new ArrayList<>(entitiesWithActiveHealthBars.values()).forEach(task -> {
-            if (!task.isCancelled()) {
-                task.cancel();
-            }
-        });
-        entitiesWithActiveHealthBars.clear();
-
-        new ArrayList<>(entitiesWithActiveHologramBars.keySet()).forEach(entity -> HOLOGRAPH_UTIL.cancelHologramFor(entity, entitiesWithActiveHologramBars));
+        }
         restorePersistedNames();
-        originalEntityNames.clear();
     }
 
+    /**
+     * Restores loaded inline overlays without forcing chunk/entity storage to load.
+     */
     public void restorePersistedNames() {
         Bukkit.getWorlds()
-              .stream()
-              .flatMap(world -> java.util.Arrays.stream(world.getLoadedChunks()))
-              .flatMap(chunk -> java.util.Arrays.stream(chunk.getEntities()))
-              .filter(LivingEntity.class::isInstance)
-              .map(LivingEntity.class::cast)
-              .filter(this::hasPersistedOriginalName)
-              .forEach(this::resetEntityName);
+              .forEach(world -> world.getLivingEntities()
+                                     .forEach(entity -> {
+                                         restoreOwnedName(entity);
+                                         if (!ENABLE_HEALTH_BAR.asBoolean()) {
+                                             entity.getPersistentDataContainer()
+                                                   .remove(ACTIVATED);
+                                             entity.getPersistentDataContainer()
+                                                   .remove(LEGACY_ACTIVATED);
+                                         }
+                                     }));
     }
 
+    /**
+     * Recovers activated bars in either mode; untouched mobs are never activated by this scan.
+     */
     public void refreshPersistedHolograms() {
+        stopped = false;
         Bukkit.getWorlds()
-              .stream()
-              .flatMap(world -> java.util.Arrays.stream(world.getLoadedChunks()))
-              .flatMap(chunk -> java.util.Arrays.stream(chunk.getEntities()))
-              .filter(LivingEntity.class::isInstance)
-              .map(LivingEntity.class::cast)
-              .filter(this::hasPersistedAlwaysVisibleHologram)
-              .forEach(this::restorePersistedHologram);
-    }
-
-    void restorePersistedHologram(LivingEntity entity) {
-        if (!ENABLE_HEALTH_BAR.asBoolean() || !ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean() || !HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
-            entity.getPersistentDataContainer()
-                  .remove(ALWAYS_VISIBLE_HOLOGRAM_KEY);
-            return;
-        }
-
-        double maxHealth = Objects.requireNonNull(entity.getAttribute(Attribute.MAX_HEALTH))
-                                  .getValue();
-        displayHolographicHealthBar(entity, createHealthBar(Math.min(entity.getHealth(), maxHealth), maxHealth));
-    }
-
-    private boolean hasPersistedAlwaysVisibleHologram(LivingEntity entity) {
-        return Boolean.TRUE.equals(entity.getPersistentDataContainer()
-                                        .get(ALWAYS_VISIBLE_HOLOGRAM_KEY, PersistentDataType.BOOLEAN));
-    }
-
-    private void persistOriginalName(LivingEntity entity, OriginalNameState originalName) {
-        PersistentDataContainer data = entity.getPersistentDataContainer();
-        data.set(ORIGINAL_NAME_MARKER_KEY, PersistentDataType.BOOLEAN, true);
-        data.set(ORIGINAL_NAME_VISIBLE_KEY, PersistentDataType.BOOLEAN, originalName.visible());
-        if (originalName.name() == null) {
-            data.remove(ORIGINAL_NAME_KEY);
-        } else {
-            data.set(ORIGINAL_NAME_KEY, PersistentDataType.STRING, TEXT_UTIL.serializeComponent(originalName.name()));
-        }
-    }
-
-    private OriginalNameState readPersistedOriginalName(LivingEntity entity) {
-        if (!hasPersistedOriginalName(entity)) {
-            return null;
-        }
-
-        PersistentDataContainer data = entity.getPersistentDataContainer();
-        String name = data.get(ORIGINAL_NAME_KEY, PersistentDataType.STRING);
-        boolean visible = Boolean.TRUE.equals(data.get(ORIGINAL_NAME_VISIBLE_KEY, PersistentDataType.BOOLEAN));
-        return new OriginalNameState(TEXT_UTIL.deserializeComponent(name), visible);
-    }
-
-    private boolean hasPersistedOriginalName(LivingEntity entity) {
-        return Boolean.TRUE.equals(entity.getPersistentDataContainer()
-                                        .get(ORIGINAL_NAME_MARKER_KEY, PersistentDataType.BOOLEAN));
-    }
-
-    private void clearPersistedOriginalName(LivingEntity entity) {
-        PersistentDataContainer data = entity.getPersistentDataContainer();
-        data.remove(ORIGINAL_NAME_MARKER_KEY);
-        data.remove(ORIGINAL_NAME_KEY);
-        data.remove(ORIGINAL_NAME_VISIBLE_KEY);
-    }
-
-    record OriginalNameState(Component name, boolean visible) {
-    }
-
-    private LivingEntityTaskInfo spawnHologramBar(LivingEntity entity, Component name) {
-        ArmorStand armorStand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), name);
-
-        BukkitTask task = new BukkitRunnable() {
-            int ticks = 0;
-
-            @Override
-            public void run() {
-                if (shouldRemoveHologramBar(ticks++, entity.isValid(), armorStand.isValid(), HEALTH_BAR_ALWAYS_VISIBLE.asBoolean())) {
-                    cancel();
-                    return;
-                }
-                armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()));
-            }
-
-            @Override
-            public synchronized void cancel() {
-                if (armorStand.isValid()) {
-                    armorStand.remove();
-                }
-                entitiesWithActiveHologramBars.remove(entity);
-                super.cancel();
-            }
-        }.runTaskTimer(DamageIndicator.getInstance(), 0, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
-
-        return new LivingEntityTaskInfo(task, armorStand);
-    }
-
-    private boolean shouldRemoveHologramBar(int ticks, boolean entityValid, boolean armorStandValid, boolean alwaysVisible) {
-        return !entityValid || !armorStandValid || (!alwaysVisible && ticks >= getDisplayDurationInTicks());
-    }
-
-    private int getDisplayDurationInTicks() {
-        int seconds = HEALTH_BAR_DISPLAY_DURATION.asInt();
-        return TICKS_PER_SECOND * Math.max(MIN_SECONDS, Math.min(seconds, MAX_SECONDS));
-    }
-
-    private double resolveDisplayHealth(LivingEntity livingEntity, double finalDamage, double maxHealth) {
-        return Math.min(Math.max(0.0, livingEntity.getHealth() - finalDamage), maxHealth);
+              .forEach(world -> world.getLivingEntities()
+                                     .forEach(this::recover));
     }
 
     private Component createHealthBar(double current, double max) {
-        int total = HEALTH_BAR_LENGTH.asIntBetween(1, MAX_HEALTH_BAR_LENGTH);
-        double percent = 1.0 - (current / max);
-        int dead = Math.min(total - 1, Math.max(0, (int) Math.round(percent * total)));
-        int alive = total - dead;
-
-        TextComponent alivePart = TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive);
-        TextComponent deadPart = TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), dead);
-
+        int total = HEALTH_BAR_LENGTH.asIntBetween(1, 100);
+        int alive = current <= 0 ? 0 : Math.max(1, Math.min(total, (int) Math.round(current / max * total)));
         return HEALTH_BAR_PREFIX.asFormattedString()
-                                .append(alivePart.append(deadPart))
+                                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive))
+                                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), total - alive))
                                 .append(HEALTH_BAR_SUFFIX.asFormattedString());
+    }
+
+    private static final class ActiveBar {
+
+        private UUID hologram;
+        private long expiresAt;
+        private long nextFollow;
     }
 }
