@@ -1,12 +1,16 @@
 # DamageIndicator
 
-Damage numbers, health bars and holographic names for Spigot/Paper 26.2.
-Build with JDK 26. The plugin emits Java 21 bytecode, but Minecraft 26.2
-requires Java 25 or newer.
+Damage numbers, health bars and holographic names for Spigot/Paper 26.2 and 26.3.
+Build with JDK 27; the plugin emits Java 21 bytecode.
+Spigot 26.2/26.3 requires Java 25-26 and currently rejects Java 27.
+Paper also supports Java 27; Minecraft's minimum is Java 25.
+
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH
+MOJANG OR MICROSOFT.
 
 ## Build
 
-Set `JAVA_HOME` to your JDK 26 installation. Verify Maven's Java version, then build:
+Set `JAVA_HOME` to your JDK 27 installation. Verify Maven's Java version, then build:
 
 ```powershell
 .\mvnw.cmd -version
@@ -33,7 +37,8 @@ Never use the server-wide `/reload`.
 
 `enable_damage_indicator` is independent. `enable_damage_merge` groups hits by
 attacker/victim UUID, resolving projectile shooters; environmental hits stay
-separate. Lethal numbers finish their animation.
+separate. Native numbers reconcile committed HP by the next server tick;
+lethal numbers finish their animation.
 
 Always-visible bars activate on damage/healing, not on untouched mobs, and
 recover after unload/reload/restart. Temporary bars expire independently of
@@ -54,6 +59,8 @@ excluding players, armour stands and NPCs; discovery checks 128 candidates/secon
 
 Values must be finite. Invalid values use diagnosed defaults; malformed YAML
 preserves the live configuration and file. Canonical keys override legacy keys.
+Existing files are not rewritten on load/reload; defaults and migration apply
+in memory. Reload applies disk contents and discards unsaved `getConfig()` edits.
 Prefix/suffix limits are 256 characters each, symbols 32; combined serialized bar
 text must fit Spigot's 256-character limit or default appearance is used.
 
@@ -74,7 +81,10 @@ Permissions default to op; cleanup is player-only, within a 50-block-per-axis bo
 and an enabled plugin. It displays already-applied damage without changing HP or
 firing native events; do not also display the same native hit.
 
-[Source](https://github.com/stealingdapenta/damageindicator) |
+[Source](https://github.com/TomDesch/damageIndicator) |
 [Spigot resource](https://www.spigotmc.org/resources/damage-indicator-healthbar.113612/)
 
 License: MIT.
+
+Bundled library licenses and attributions are included in the JAR.
+The plugin has no telemetry or external network requests.
