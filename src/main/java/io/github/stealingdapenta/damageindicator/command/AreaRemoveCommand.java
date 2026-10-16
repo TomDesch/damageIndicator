@@ -1,18 +1,16 @@
 package io.github.stealingdapenta.damageindicator.command;
 
-import static io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener.getCustomNamespacedKey;
-import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.config.Permission;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
 public class AreaRemoveCommand implements CommandExecutor {
@@ -36,9 +34,7 @@ public class AreaRemoveCommand implements CommandExecutor {
 
         int removedCount = 0;
         for (Entity entity : player.getNearbyEntities(RADIUS, RADIUS, RADIUS)) {
-            if (entity instanceof ArmorStand stand && stand.isValid()
-                    && Boolean.TRUE.equals(entity.getPersistentDataContainer()
-                                          .getOrDefault(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, false))) {
+            if (entity instanceof ArmorStand stand && stand.isValid() && HOLOGRAPH_UTIL.isTaggedHologram(stand)) {
                 HOLOGRAPH_UTIL.cleanup(stand);
                 removedCount++;
             }

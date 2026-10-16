@@ -12,7 +12,11 @@ import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListene
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -35,13 +39,15 @@ public class DamageIndicator extends JavaPlugin {
     }
 
     /**
-     * Displays already-applied custom HP damage without manufacturing a Bukkit damage event.
-     * This Bukkit-only signature is safe for optional reflection callers despite Adventure relocation.
+     * Displays already-applied custom HP damage without manufacturing a Bukkit damage event. This Bukkit-only signature is safe for optional reflection callers despite Adventure relocation.
      */
-    public void displayVirtualDamage(org.bukkit.entity.LivingEntity victim, org.bukkit.entity.Entity attacker,
-                                     double damage, org.bukkit.event.entity.EntityDamageEvent.DamageCause cause) {
-        if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Damage indicators require the server thread");
-        if (!configured) throw new IllegalStateException("DamageIndicator is not enabled");
+    public void displayVirtualDamage(LivingEntity victim, Entity attacker, double damage, DamageCause cause) {
+        if (!Bukkit.isPrimaryThread()) {
+            throw new IllegalStateException("Damage indicators require the server thread");
+        }
+        if (!configured) {
+            throw new IllegalStateException("DamageIndicator is not enabled");
+        }
         damageIndicatorListener.displayDamage(victim, attacker, damage, cause);
     }
 
@@ -121,16 +127,16 @@ public class DamageIndicator extends JavaPlugin {
         getLogger().info("Damage Indicator plugin disabled.");
     }
 
-    private void registerCommand(String commandName, Object executor) {
+    private void registerCommand(String commandName, CommandExecutor executor) {
         PluginCommand command = getCommand(commandName);
         if (command == null) {
             getLogger().warning("Command '" + commandName + "' not found in plugin.yml");
             return;
         }
-        command.setExecutor((org.bukkit.command.CommandExecutor) executor);
+        command.setExecutor(executor);
     }
 
-    private void registerListener(org.bukkit.event.Listener listener) {
+    private void registerListener(Listener listener) {
         Bukkit.getPluginManager()
               .registerEvents(listener, this);
     }

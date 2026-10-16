@@ -50,11 +50,12 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
- * Activation-based health bars. A single next-tick heartbeat reads committed health and follows active displays; neither the scheduler nor the tracking maps retain entity wrappers. Inline bars intentionally exclude players, whose nameplates are not
- * custom names.
+ * Activation-based bars updated from committed health by one next-tick heartbeat. UUID tracking avoids retaining unloaded wrappers; players use holograms only.
  */
 public class HealthBarListener implements Listener {
 
+    private static final int TICKS_PER_SECOND = 20;
+    private static final long HEARTBEAT_PERIOD_TICKS = 1;
     private static final NamespacedKey ORIGINAL_MARKER = key("health-name-overridden");
     private static final NamespacedKey ORIGINAL_NAME = key("health-original-name");
     private static final NamespacedKey ORIGINAL_VISIBLE = key("health-original-visible");
@@ -66,88 +67,128 @@ public class HealthBarListener implements Listener {
     private final Set<UUID> pendingRefreshes = new HashSet<>();
     private final Set<UUID> pendingRecoveries = new HashSet<>();
     private BukkitTask heartbeat;
-    private long tick;
+    private long currentTick;
     private boolean stopped;
 
     private static NamespacedKey key(String value) {
-        return new NamespacedKey("damageindicator", value);
+        return Objects.requireNonNull(NamespacedKey.fromString("damageindicator:" + value));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayHealthBar(EntityDamageEvent event) {
-        if (!event.isCancelled() && event.getEntity() instanceof LivingEntity entity && ENABLE_HEALTH_BAR.asBoolean() && NativeDamageAccounting.appliedDamage(event, entity) > 0) {
+        if (!ENABLE_HEALTH_BAR.asBoolean()) {
+            return;
+        }
+        if (event.getEntity() instanceof LivingEntity entity && NativeDamageAccounting.appliedDamage(event, entity) > 0) {
             queueRefresh(entity);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void updateHealthBarOnHeal(EntityRegainHealthEvent event) {
-        if (!event.isCancelled() && event.getEntity() instanceof LivingEntity entity && ENABLE_HEALTH_BAR.asBoolean() && Double.isFinite(event.getAmount()) && event.getAmount() > 0 && (activeBars.containsKey(entity.getUniqueId())
-                || HEALTH_BAR_ALWAYS_VISIBLE.asBoolean())) {
+        if (!ENABLE_HEALTH_BAR.asBoolean() || !hasPositiveHealing(event)) {
+            return;
+        }
+        if (event.getEntity() instanceof LivingEntity entity && shouldRefreshOnHeal(entity)) {
             queueRefresh(entity);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void updateHealthBarOnResurrection(EntityResurrectEvent event) {
-        if (!event.isCancelled() && ENABLE_HEALTH_BAR.asBoolean()) {
+        if (ENABLE_HEALTH_BAR.asBoolean()) {
             queueRefresh(event.getEntity());
         }
     }
 
     private void queueRefresh(LivingEntity entity) {
-        if (stopped || entity instanceof Player && !ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
+        if (stopped || !supportsDisplayMode(entity)) {
             return;
         }
         pendingRefreshes.add(entity.getUniqueId());
-        ensureHeartbeat();
+        startHeartbeat();
     }
 
-    private void ensureHeartbeat() {
+    private boolean hasPositiveHealing(EntityRegainHealthEvent event) {
+        return Double.isFinite(event.getAmount()) && event.getAmount() > 0;
+    }
+
+    private boolean shouldRefreshOnHeal(LivingEntity entity) {
+        return activeBars.containsKey(entity.getUniqueId()) || HEALTH_BAR_ALWAYS_VISIBLE.asBoolean();
+    }
+
+    private boolean supportsDisplayMode(LivingEntity entity) {
+        return !(entity instanceof Player) || ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
+    }
+
+    private void startHeartbeat() {
         if (!stopped && heartbeat == null) {
             heartbeat = Bukkit.getScheduler()
-                              .runTaskTimer(DamageIndicator.getInstance(), this::heartbeat, 1, 1);
+                              .runTaskTimer(DamageIndicator.getInstance(), this::heartbeat, HEARTBEAT_PERIOD_TICKS, HEARTBEAT_PERIOD_TICKS);
         }
     }
 
     private void heartbeat() {
-        tick++;
+        currentTick++;
+        flushRecoveries();
+        flushHealthUpdates();
+        new ArrayList<>(activeBars.keySet()).forEach(this::updateActiveBar);
+        stopHeartbeatIfIdle();
+    }
+
+    private void flushRecoveries() {
         for (UUID id : new ArrayList<>(pendingRecoveries)) {
             pendingRecoveries.remove(id);
             if (Bukkit.getEntity(id) instanceof LivingEntity entity) {
                 recover(entity);
             }
         }
+    }
+
+    /**
+     * Multiple damage/heal events in one tick share a single committed-health read.
+     */
+    private void flushHealthUpdates() {
         for (UUID id : new ArrayList<>(pendingRefreshes)) {
             pendingRefreshes.remove(id);
             if (Bukkit.getEntity(id) instanceof LivingEntity entity && canDisplay(entity)) {
                 activate(entity);
             }
         }
-        for (UUID id : new ArrayList<>(activeBars.keySet())) {
-            ActiveBar bar = activeBars.get(id);
-            if (!(Bukkit.getEntity(id) instanceof LivingEntity entity)) {
-                detach(id);
-            } else if (!ENABLE_HEALTH_BAR.asBoolean()) {
-                clearDisplay(entity, true);
-            } else if (!canDisplay(entity)) {
-                clearDisplay(entity, entity.isDead());
-            } else if (!HEALTH_BAR_ALWAYS_VISIBLE.asBoolean() && tick >= bar.expiresAt) {
-                clearDisplay(entity, false);
-            } else if (tick >= bar.nextFollow) {
-                render(entity, bar);
-            }
+    }
+
+    private void updateActiveBar(UUID id) {
+        ActiveBar bar = activeBars.get(id);
+        if (bar == null) {
+            return;
         }
-        stopHeartbeatIfIdle();
+        if (!(Bukkit.getEntity(id) instanceof LivingEntity entity)) {
+            detach(id);
+        } else if (!ENABLE_HEALTH_BAR.asBoolean()) {
+            clearDisplay(entity, true);
+        } else if (!canDisplay(entity)) {
+            clearDisplay(entity, entity.isDead());
+        } else if (hasExpired(bar)) {
+            clearDisplay(entity, false);
+        } else if (currentTick >= bar.nextFollow) {
+            render(entity, bar);
+        }
+    }
+
+    private boolean hasExpired(ActiveBar bar) {
+        return !HEALTH_BAR_ALWAYS_VISIBLE.asBoolean() && currentTick >= bar.expiresAt;
     }
 
     private boolean canDisplay(LivingEntity entity) {
-        return !stopped && ENABLE_HEALTH_BAR.asBoolean() && entity.isValid() && !entity.isDead() && (!(entity instanceof Player) || ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean());
+        if (stopped || !ENABLE_HEALTH_BAR.asBoolean()) {
+            return false;
+        }
+        return entity.isValid() && !entity.isDead() && supportsDisplayMode(entity);
     }
 
     private void activate(LivingEntity entity) {
         ActiveBar bar = activeBars.computeIfAbsent(entity.getUniqueId(), ignored -> new ActiveBar());
-        bar.expiresAt = tick + 20L * HEALTH_BAR_DISPLAY_DURATION.asIntBetween(1, 10);
+        bar.expiresAt = currentTick + (long) TICKS_PER_SECOND * HEALTH_BAR_DISPLAY_DURATION.asInt();
         entity.getPersistentDataContainer()
               .set(ACTIVATED, PersistentDataType.BOOLEAN, true);
         entity.getPersistentDataContainer()
@@ -174,42 +215,54 @@ public class HealthBarListener implements Listener {
             return;
         }
         String name = TEXT_UTIL.serializeComponent(createHealthBar(Math.clamp(health, 0, max), max));
-        bar.nextFollow = tick + HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1);
+        bar.nextFollow = currentTick + HOLOGRAM_FOLLOW_SPEED.asInt();
         if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
-            restoreOwnedName(entity);
-            Entity existing = bar.hologram == null ? null : Bukkit.getEntity(bar.hologram);
-            if (!(existing instanceof ArmorStand stand) || !stand.isValid()) {
-                ArmorStand created = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
-                if (!created.isValid()) {
-                    clearDisplay(entity, false);
-                    return;
-                }
-                bar.hologram = created.getUniqueId();
-                UUID ownerId = entity.getUniqueId();
-                HOLOGRAPH_UTIL.onCleanup(created, () -> {
-                    if (Bukkit.getEntity(ownerId) instanceof LivingEntity owner) {
-                        clearDisplay(owner, true);
-                    } else {
-                        pendingRefreshes.remove(ownerId);
-                        pendingRecoveries.remove(ownerId);
-                        detach(ownerId);
-                        stopHeartbeatIfIdle();
-                    }
-                });
-            } else {
-                if (!Objects.equals(stand.getCustomName(), name)) {
-                    stand.setCustomName(name);
-                }
-                if (!HOLOGRAPH_UTIL.teleportIfMoved(stand, HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()))) {
-                    clearDisplay(entity, false);
-                }
-            }
+            renderHologram(entity, bar, name);
         } else {
             removeHologram(bar);
             writeOwnedName(entity, name);
         }
     }
 
+    private void renderHologram(LivingEntity entity, ActiveBar bar, String name) {
+        restoreOwnedName(entity);
+        Entity existing = bar.hologram == null ? null : Bukkit.getEntity(bar.hologram);
+        if (!(existing instanceof ArmorStand stand) || !stand.isValid()) {
+            createHologram(entity, bar, name);
+            return;
+        }
+        if (!Objects.equals(stand.getCustomName(), name)) {
+            stand.setCustomName(name);
+        }
+        if (!HOLOGRAPH_UTIL.teleportIfMoved(stand, HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()))) {
+            clearDisplay(entity, false);
+        }
+    }
+
+    private void createHologram(LivingEntity entity, ActiveBar bar, String name) {
+        ArmorStand created = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
+        if (!created.isValid()) {
+            clearDisplay(entity, false);
+            return;
+        }
+        bar.hologram = created.getUniqueId();
+        UUID ownerId = entity.getUniqueId();
+        HOLOGRAPH_UTIL.onCleanup(created, () -> clearHologramOwner(ownerId));
+    }
+
+    private void clearHologramOwner(UUID ownerId) {
+        if (Bukkit.getEntity(ownerId) instanceof LivingEntity owner) {
+            clearDisplay(owner, true);
+            return;
+        }
+        cancelPendingWork(ownerId);
+        detach(ownerId);
+        stopHeartbeatIfIdle();
+    }
+
+    /**
+     * External name changes become the new backup before the next overlay is written.
+     */
     private void writeOwnedName(LivingEntity entity, String overlay) {
         PersistentDataContainer data = entity.getPersistentDataContainer();
         if (hasLegacyOriginal(data)) {
@@ -252,6 +305,9 @@ public class HealthBarListener implements Listener {
         return Boolean.TRUE.equals(data.get(ORIGINAL_MARKER, PersistentDataType.BOOLEAN)) && data.get(LAST_OVERLAY, PersistentDataType.STRING) == null;
     }
 
+    /**
+     * New overlays require a matching fingerprint; legacy records restore their saved original.
+     */
     private void restoreOwnedName(LivingEntity entity) {
         PersistentDataContainer data = entity.getPersistentDataContainer();
         boolean legacy = hasLegacyOriginal(data);
@@ -268,12 +324,11 @@ public class HealthBarListener implements Listener {
     }
 
     /**
-     * Detaches pending/active displays and restores only an inline name that we still own. Call before an administrative name wipe; clearing activation prevents later recovery.
+     * Detaches pending/active displays before a name wipe; clearing activation also prevents recovery.
      */
     public void clearDisplay(LivingEntity entity, boolean clearActivation) {
         UUID id = entity.getUniqueId();
-        pendingRefreshes.remove(id);
-        pendingRecoveries.remove(id);
+        cancelPendingWork(id);
         detach(id);
         restoreOwnedName(entity);
         if (clearActivation) {
@@ -283,6 +338,11 @@ public class HealthBarListener implements Listener {
                   .remove(LEGACY_ACTIVATED);
         }
         stopHeartbeatIfIdle();
+    }
+
+    private void cancelPendingWork(UUID id) {
+        pendingRefreshes.remove(id);
+        pendingRecoveries.remove(id);
     }
 
     private void detach(UUID id) {
@@ -336,8 +396,8 @@ public class HealthBarListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onWorldUnload(WorldUnloadEvent event) {
-        new ArrayList<>(event.getWorld().getLivingEntities())
-                .forEach(entity -> clearDisplay(entity, !ENABLE_HEALTH_BAR.asBoolean()));
+        new ArrayList<>(event.getWorld()
+                             .getLivingEntities()).forEach(entity -> clearDisplay(entity, !ENABLE_HEALTH_BAR.asBoolean()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -345,8 +405,7 @@ public class HealthBarListener implements Listener {
         // Bukkit forbids modifying the removed entity; its persisted data is recovered on load.
         UUID id = event.getEntity()
                        .getUniqueId();
-        pendingRefreshes.remove(id);
-        pendingRecoveries.remove(id);
+        cancelPendingWork(id);
         detach(id);
         stopHeartbeatIfIdle();
     }
@@ -361,7 +420,7 @@ public class HealthBarListener implements Listener {
         if (!stopped) {
             pendingRecoveries.add(event.getPlayer()
                                        .getUniqueId());
-            ensureHeartbeat();
+            startHeartbeat();
         }
     }
 
@@ -387,7 +446,7 @@ public class HealthBarListener implements Listener {
             data.remove(ACTIVATED);
         } else if (activated && HEALTH_BAR_ALWAYS_VISIBLE.asBoolean() && canDisplay(entity)) {
             activate(entity);
-            ensureHeartbeat();
+            startHeartbeat();
         }
     }
 
@@ -444,12 +503,20 @@ public class HealthBarListener implements Listener {
     }
 
     private Component createHealthBar(double current, double max) {
-        int total = HEALTH_BAR_LENGTH.asIntBetween(1, 100);
-        int alive = current <= 0 ? 0 : Math.max(1, Math.min(total, (int) Math.round(current / max * total)));
+        int total = HEALTH_BAR_LENGTH.asInt();
+        int alive = countAliveSymbols(current, max, total);
         return HEALTH_BAR_PREFIX.asFormattedString()
                                 .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive))
                                 .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), total - alive))
                                 .append(HEALTH_BAR_SUFFIX.asFormattedString());
+    }
+
+    private int countAliveSymbols(double current, double max, int length) {
+        if (current <= 0) {
+            return 0;
+        }
+        int rounded = (int) Math.round(current / max * length);
+        return Math.clamp(rounded, 1, length);
     }
 
     private static final class ActiveBar {

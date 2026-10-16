@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -11,7 +13,6 @@ import static org.mockito.Mockito.when;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigurationLoadException;
-import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,16 +26,15 @@ class ReloadConfigCommandTest {
     void invalidConfigurationReportsFailureInsteadOfSuccess() {
         when(mockCommandSender.hasPermission("damageindicator.reload")).thenReturn(true);
         DamageIndicator plugin = mock(DamageIndicator.class);
-        org.mockito.Mockito.doThrow(new ConfigurationLoadException("Invalid YAML", new IllegalArgumentException()))
-                .when(plugin).reloadConfiguration();
+        doThrow(new ConfigurationLoadException("Invalid YAML", new IllegalArgumentException())).when(plugin)
+                                                                                               .reloadConfiguration();
         try (MockedStatic<DamageIndicator> singleton = mockStatic(DamageIndicator.class)) {
-            singleton.when(DamageIndicator::getInstance).thenReturn(plugin);
+            singleton.when(DamageIndicator::getInstance)
+                     .thenReturn(plugin);
             assertTrue(reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[0]));
         }
-        verify(mockCommandSender).sendMessage(
-                "Configuration reload failed; the previous configuration is still active. Check the server log.");
-        verify(mockCommandSender, org.mockito.Mockito.never()).sendMessage(
-                "Successfully reloaded the DamageIndicator configuration file.");
+        verify(mockCommandSender).sendMessage("Configuration reload failed; the previous configuration is still active. Check the server log.");
+        verify(mockCommandSender, never()).sendMessage("Successfully reloaded the DamageIndicator configuration file.");
     }
 
     private static final String LABEL = "label";

@@ -4,25 +4,23 @@ import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLO
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture;
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture.Model;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Consumer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.bukkit.World;
@@ -83,8 +81,7 @@ class HolographUtilTest {
     void invalidSpawnsCannotRegisterOwnerCallbacks() {
         ArmorStand invalid = mock(ArmorStand.class);
         Runnable cleanup = mock(Runnable.class);
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> HOLOGRAPH_UTIL.onCleanup(invalid, cleanup));
+        assertThrows(IllegalArgumentException.class, () -> HOLOGRAPH_UTIL.onCleanup(invalid, cleanup));
         verify(cleanup, never()).run();
     }
 
@@ -128,33 +125,22 @@ class HolographUtilTest {
 
         assertTrue(HOLOGRAPH_UTIL.teleportIfMoved(stand, start.clone()));
         verify(stand, never()).teleport(any(Location.class));
-        Location moved = start.clone().add(1, 0, 0);
+        Location moved = start.clone()
+                              .add(1, 0, 0);
         assertTrue(HOLOGRAPH_UTIL.teleportIfMoved(stand, moved));
         verify(stand).teleport(moved);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void createdHologramsAreTransientAndRegisteredAfterSpawning() {
-        World world = mock(World.class);
-        ArmorStand stand = mock(ArmorStand.class);
-        var data = mock(org.bukkit.persistence.PersistentDataContainer.class);
-        when(stand.getPersistentDataContainer()).thenReturn(data);
-        when(stand.getUniqueId()).thenReturn(UUID.randomUUID());
-        when(stand.isValid()).thenReturn(true);
-        when(world.spawn(any(Location.class), eq(ArmorStand.class), any(Consumer.class))).thenAnswer(invocation -> {
-            Consumer<ArmorStand> configure = invocation.getArgument(2);
-            configure.accept(stand);
-            return stand;
-        });
-        try (var keys = org.mockito.Mockito.mockStatic(
-                io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener.class)) {
-            keys.when(io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener::getCustomNamespacedKey)
-                    .thenReturn(new org.bukkit.NamespacedKey("damageindicator", "customnsktag"));
-            assertEquals(stand, HOLOGRAPH_UTIL.createArmorStandHologram(new Location(world, 0, 0, 0), Component.text("Name")));
+        try (ListenerFixture fixture = new ListenerFixture()) {
+            fixture.open();
+            ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(new Location(fixture.world, 0, 0, 0), Component.text("Name"));
+
+            assertEquals("Name", stand.getCustomName());
+            verify(stand).setPersistent(false);
+            assertTrue(HOLOGRAPH_UTIL.isActive(stand));
         }
-        verify(stand).setPersistent(false);
-        assertTrue(HOLOGRAPH_UTIL.isActive(stand));
     }
 
     @Test
@@ -173,50 +159,20 @@ class HolographUtilTest {
 
     @Test
     void cancelHologramFor_livingEntityAndData_success() {
-        LivingEntity livingEntity = mock(LivingEntity.class);
-        Map<LivingEntity, LivingEntityTaskInfo> data = new HashMap<>();
+        try (ListenerFixture fixture = new ListenerFixture()) {
+            fixture.open();
+            LivingEntity livingEntity = fixture.mob(null).entity;
+            Model stand = fixture.entity(ArmorStand.class, null);
+            var task = fixture.clock.scheduler.runTaskTimer(fixture.plugin, () -> {
+            }, 1, 1);
+            Map<LivingEntity, LivingEntityTaskInfo> data = new HashMap<>();
+            data.put(livingEntity, new LivingEntityTaskInfo(task, (ArmorStand) stand.entity));
 
-        BukkitTaskStub taskStub = new BukkitTaskStub();
-        ArmorStand armorStand = mock(ArmorStand.class);
-        LivingEntityTaskInfo taskInfo = new LivingEntityTaskInfo(taskStub, armorStand);
-        data.put(livingEntity, taskInfo);
-        when(taskInfo.armorStand()
-                     .isValid()).thenReturn(true);
+            HOLOGRAPH_UTIL.cancelHologramFor(livingEntity, data);
 
-        HOLOGRAPH_UTIL.cancelHologramFor(livingEntity, data);
-
-        assertTrue(taskStub.isCancelled());
-        verify(armorStand).remove();
-
-        assertFalse(data.containsKey(livingEntity));
-    }
-
-    private static class BukkitTaskStub implements BukkitTask {
-
-        private boolean cancelled = false;
-
-        @Override
-        public synchronized void cancel() throws IllegalStateException {
-            this.cancelled = true;
-        }
-
-        @Override
-        public int getTaskId() {
-            return 0;
-        }
-
-        @Override
-        public @NotNull Plugin getOwner() {
-            return mock(Plugin.class);
-        }
-
-        @Override
-        public boolean isSync() {
-            return false;
-        }
-
-        public boolean isCancelled() {
-            return cancelled;
+            assertTrue(task.isCancelled());
+            assertFalse(stand.valid);
+            assertFalse(data.containsKey(livingEntity));
         }
     }
 }

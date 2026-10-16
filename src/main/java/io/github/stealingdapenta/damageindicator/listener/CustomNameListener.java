@@ -39,17 +39,19 @@ import org.bukkit.scheduler.BukkitTask;
  */
 public class CustomNameListener implements Listener {
 
-    private static final NamespacedKey HIDDEN_CUSTOM_NAME_KEY = new NamespacedKey("damageindicator", "custom-name-hidden");
-    private static final int DISCOVERY_INTERVAL = 20;
+    private static final NamespacedKey HIDDEN_CUSTOM_NAME_KEY = Objects.requireNonNull(NamespacedKey.fromString("damageindicator:custom-name-hidden"));
+    private static final int DISCOVERY_INTERVAL_TICKS = 20;
     private static final int DISCOVERY_BATCH_SIZE = 128;
+    private static final long HEARTBEAT_PERIOD_TICKS = 1;
+    private static final long FIRST_DISCOVERY_TICK = 1;
     private final Map<UUID, NameDisplay> activeNames = new HashMap<>();
     private final Set<UUID> candidates = new LinkedHashSet<>();
     private BukkitTask heartbeat;
-    private long ticks;
+    private long currentTick;
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntitySpawn(EntitySpawnEvent event) {
-        if (event.getEntity() instanceof LivingEntity entity && eligible(entity) && isEnabled()) {
+        if (event.getEntity() instanceof LivingEntity entity && isEligible(entity) && isEnabled()) {
             candidates.add(entity.getUniqueId());
             startHeartbeat();
         }
@@ -57,24 +59,32 @@ public class CustomNameListener implements Listener {
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onEntitiesLoad(EntitiesLoadEvent event) {
-        event.getEntities().stream().filter(LivingEntity.class::isInstance)
-                .map(LivingEntity.class::cast).forEach(this::recoverAndReplaceCustomName);
+        event.getEntities()
+             .stream()
+             .filter(LivingEntity.class::isInstance)
+             .map(LivingEntity.class::cast)
+             .forEach(this::recoverAndReplaceCustomName);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntitiesUnload(EntitiesUnloadEvent event) {
-        event.getEntities().stream().filter(LivingEntity.class::isInstance)
-                .map(LivingEntity.class::cast).forEach(this::clearDisplay);
+        event.getEntities()
+             .stream()
+             .filter(LivingEntity.class::isInstance)
+             .map(LivingEntity.class::cast)
+             .forEach(this::clearDisplay);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onWorldUnload(WorldUnloadEvent event) {
-        new ArrayList<>(event.getWorld().getLivingEntities()).forEach(this::clearDisplay);
+        new ArrayList<>(event.getWorld()
+                             .getLivingEntities()).forEach(this::clearDisplay);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityRemove(EntityRemoveEvent event) {
-        UUID id = event.getEntity().getUniqueId();
+        UUID id = event.getEntity()
+                       .getUniqueId();
         candidates.remove(id);
         removeDisplay(id);
     }
@@ -89,12 +99,12 @@ public class CustomNameListener implements Listener {
         clearDisplay(event.getEntity());
     }
 
-    private boolean eligible(LivingEntity entity) {
+    private boolean isEligible(LivingEntity entity) {
         return !(entity instanceof ArmorStand) && !(entity instanceof Player) && !entity.hasMetadata("NPC");
     }
 
     void replaceWithHologramIfNeeded(LivingEntity entity) {
-        if (!eligible(entity) || !entity.isValid() || !isEnabled()) {
+        if (!isEligible(entity) || !entity.isValid() || !isEnabled()) {
             return;
         }
         UUID id = entity.getUniqueId();
@@ -114,61 +124,46 @@ public class CustomNameListener implements Listener {
             return;
         }
 
-        ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(
-                HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()),
-                TEXT_UTIL.deserializeComponent(name));
+        ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
         if (!stand.isValid()) {
             candidates.remove(id);
             return;
         }
-        entity.getPersistentDataContainer().set(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN, true);
+        entity.getPersistentDataContainer()
+              .set(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN, true);
         entity.setCustomNameVisible(false);
         activeNames.put(id, new NameDisplay(stand, name));
-        HOLOGRAPH_UTIL.onCleanup(stand, () -> {
-            Entity loaded = Bukkit.getEntity(id);
-            if (loaded instanceof LivingEntity living) {
-                clearDisplay(living);
-            } else {
-                candidates.remove(id);
-                removeDisplay(id);
-            }
-        });
+        HOLOGRAPH_UTIL.onCleanup(stand, () -> clearNameOwner(id));
         startHeartbeat();
+    }
+
+    private void clearNameOwner(UUID id) {
+        Entity loaded = Bukkit.getEntity(id);
+        if (loaded instanceof LivingEntity living) {
+            clearDisplay(living);
+        } else {
+            candidates.remove(id);
+            removeDisplay(id);
+        }
     }
 
     private void startHeartbeat() {
         if (heartbeat == null && !candidates.isEmpty()) {
-            heartbeat = Bukkit.getScheduler().runTaskTimer(DamageIndicator.getInstance(), this::tick, 1, 1);
+            heartbeat = Bukkit.getScheduler()
+                              .runTaskTimer(DamageIndicator.getInstance(), this::tick, HEARTBEAT_PERIOD_TICKS, HEARTBEAT_PERIOD_TICKS);
         }
     }
 
     private void tick() {
-        ticks++;
+        currentTick++;
         if (!isEnabled()) {
             shutdown();
             return;
         }
-        if (ticks % HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1) == 0) {
-            for (UUID id : new ArrayList<>(activeNames.keySet())) {
-                Entity loaded = Bukkit.getEntity(id);
-                NameDisplay display = activeNames.get(id);
-                if (!(loaded instanceof LivingEntity entity) || !entity.isValid()) {
-                    candidates.remove(id);
-                    removeDisplay(id);
-                } else if (!display.stand.isValid()) {
-                    removeDisplay(id);
-                    restoreCustomNameVisibility(entity);
-                } else if (!eligible(entity)) {
-                    clearDisplay(entity);
-                } else {
-                    if (refreshName(entity, display) && !HOLOGRAPH_UTIL.teleportIfMoved(display.stand,
-                            HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()))) {
-                        clearDisplay(entity);
-                    }
-                }
-            }
+        if (currentTick % HOLOGRAM_FOLLOW_SPEED.asInt() == 0) {
+            followNames();
         }
-        if (ticks % DISCOVERY_INTERVAL == 1) {
+        if (currentTick % DISCOVERY_INTERVAL_TICKS == FIRST_DISCOVERY_TICK) {
             discoverNames();
         }
         if (candidates.isEmpty() && activeNames.isEmpty()) {
@@ -176,6 +171,41 @@ public class CustomNameListener implements Listener {
         }
     }
 
+    private void followNames() {
+        new ArrayList<>(activeNames.keySet()).forEach(this::followName);
+    }
+
+    private void followName(UUID id) {
+        NameDisplay display = activeNames.get(id);
+        if (display == null) {
+            return;
+        }
+        Entity loaded = Bukkit.getEntity(id);
+        if (!(loaded instanceof LivingEntity entity) || !entity.isValid()) {
+            candidates.remove(id);
+            removeDisplay(id);
+        } else if (!display.stand.isValid()) {
+            removeDisplay(id);
+            restoreCustomNameVisibility(entity);
+        } else if (!isEligible(entity)) {
+            clearDisplay(entity);
+        } else {
+            refreshAndFollow(entity, display);
+        }
+    }
+
+    private void refreshAndFollow(LivingEntity entity, NameDisplay display) {
+        if (!refreshName(entity, display)) {
+            return;
+        }
+        if (!HOLOGRAPH_UTIL.teleportIfMoved(display.stand, HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()))) {
+            clearDisplay(entity);
+        }
+    }
+
+    /**
+     * Rotate a bounded batch so late naming never requires a per-tick world scan.
+     */
     private void discoverNames() {
         ArrayList<UUID> batch = new ArrayList<>(Math.min(candidates.size(), DISCOVERY_BATCH_SIZE));
         Iterator<UUID> iterator = candidates.iterator();
@@ -185,7 +215,7 @@ public class CustomNameListener implements Listener {
         }
         for (UUID id : batch) {
             Entity loaded = Bukkit.getEntity(id);
-            if (loaded instanceof LivingEntity entity && entity.isValid() && eligible(entity)) {
+            if (loaded instanceof LivingEntity entity && entity.isValid() && isEligible(entity)) {
                 candidates.add(id);
                 replaceWithHologramIfNeeded(entity);
             } else {
@@ -212,9 +242,11 @@ public class CustomNameListener implements Listener {
     }
 
     void restoreCustomNameVisibility(LivingEntity entity) {
-        if (Boolean.TRUE.equals(entity.getPersistentDataContainer().get(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN))) {
+        if (Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                      .get(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN))) {
             entity.setCustomNameVisible(true);
-            entity.getPersistentDataContainer().remove(HIDDEN_CUSTOM_NAME_KEY);
+            entity.getPersistentDataContainer()
+                  .remove(HIDDEN_CUSTOM_NAME_KEY);
         }
     }
 
@@ -238,6 +270,9 @@ public class CustomNameListener implements Listener {
         return ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean() && ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
     }
 
+    /**
+     * Restore orphaned markers only; same-session displays retain visibility ownership.
+     */
     void recoverAndReplaceCustomName(LivingEntity entity) {
         NameDisplay active = activeNames.get(entity.getUniqueId());
         if (active != null && active.stand.isValid()) {
@@ -269,16 +304,21 @@ public class CustomNameListener implements Listener {
     }
 
     public void refreshLoadedEntities() {
-        Bukkit.getWorlds().forEach(world -> world.getLivingEntities().forEach(this::recoverAndReplaceCustomName));
+        Bukkit.getWorlds()
+              .forEach(world -> world.getLivingEntities()
+                                     .forEach(this::recoverAndReplaceCustomName));
     }
 
     public void restorePersistedNames() {
-        Bukkit.getWorlds().forEach(world -> world.getLivingEntities().stream()
-                .filter(entity -> !activeNames.containsKey(entity.getUniqueId()))
-                .forEach(this::restoreCustomNameVisibility));
+        Bukkit.getWorlds()
+              .forEach(world -> world.getLivingEntities()
+                                     .stream()
+                                     .filter(entity -> !activeNames.containsKey(entity.getUniqueId()))
+                                     .forEach(this::restoreCustomNameVisibility));
     }
 
     private static final class NameDisplay {
+
         private final ArmorStand stand;
         private String name;
 

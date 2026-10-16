@@ -1,46 +1,42 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import static io.github.stealingdapenta.damageindicator.support.ListenerFixture.key;
+import static org.bukkit.persistence.PersistentDataType.BOOLEAN;
+import static org.bukkit.persistence.PersistentDataType.STRING;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.support.BukkitRegistries;
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture;
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture.Model;
+import io.github.stealingdapenta.damageindicator.support.TickScheduler.Task;
 import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
+import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
-import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.damage.DamageType;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -51,92 +47,48 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.event.world.WorldUnloadEvent;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.scheduler.BukkitScheduler;
-import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.plugin.RegisteredListener;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 
 class HealthBarListenerTest {
 
-    private final Map<UUID, Entity> loaded = new HashMap<>();
-    private final List<Model> mobs = new ArrayList<>();
-    private final List<Model> stands = new ArrayList<>();
-    private final List<Scheduled> scheduled = new ArrayList<>();
-    private final YamlConfiguration config = new YamlConfiguration();
-    private MockedStatic<Bukkit> bukkit;
-    private MockedStatic<DamageIndicator> singleton;
-    private HealthBarListener listener;
-    private World world;
-    private Logger logger;
-    private boolean cancelSpawns;
+    private static final int BAR_LENGTH = 10;
+    private static final int FOLLOW_INTERVAL_TICKS = 3;
+    private static final int CANONICAL_NAME_LIMIT = 256;
 
-    @BeforeAll
-    static void initializeRegistries() {
-        BukkitRegistries.initialize();
-    }
+    private final ListenerFixture fixture = new ListenerFixture();
+    private final Map<UUID, Entity> loaded = fixture.loaded;
+    private final List<Model> stands = fixture.stands;
+    private final List<Task> scheduled = fixture.clock.tasks;
+    private final YamlConfiguration config = fixture.config;
+    private HealthBarListener listener;
+    private final World world = fixture.world;
+    private final Logger logger = fixture.logger;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
-        bukkit = mockStatic(Bukkit.class);
-        DamageIndicator plugin = mock(DamageIndicator.class);
-        logger = mock(Logger.class);
-        when(plugin.getName()).thenReturn("DamageIndicator");
-        when(plugin.getConfig()).thenReturn(config);
-        when(plugin.getLogger()).thenReturn(logger);
-        singleton = mockStatic(DamageIndicator.class);
-        singleton.when(DamageIndicator::getInstance)
-                 .thenReturn(plugin);
-        BukkitScheduler scheduler = mock(BukkitScheduler.class);
-        bukkit.when(Bukkit::getScheduler)
-              .thenReturn(scheduler);
-        bukkit.when(() -> Bukkit.getEntity(any(UUID.class)))
-              .thenAnswer(call -> loaded.get(call.getArgument(0)));
-        when(scheduler.runTaskTimer(eq(plugin), any(Runnable.class), anyLong(), anyLong())).thenAnswer(call -> {
-            Scheduled task = new Scheduled(call.getArgument(1));
-            scheduled.add(task);
-            return task.task;
-        });
-        world = mock(World.class);
-        bukkit.when(Bukkit::getWorlds)
-              .thenReturn(List.of(world));
-        when(world.getLivingEntities()).thenAnswer(call -> mobs.stream()
-                                                               .filter(model -> loaded.containsKey(model.id))
-                                                               .map(model -> model.entity)
-                                                               .toList());
-        when(world.spawn(any(Location.class), eq(ArmorStand.class), any(Consumer.class))).thenAnswer(call -> {
-            Model stand = new Model(ArmorStand.class, null);
-            stands.add(stand);
-            ((Consumer<ArmorStand>) call.getArgument(2)).accept((ArmorStand) stand.entity);
-            if (cancelSpawns) {
-                stand.valid = false;
-                loaded.remove(stand.id);
-            }
-            return stand.entity;
-        });
+        fixture.open();
         config.set("enable_health_bar", true);
         config.set("enable_hologram_health_bar", false);
         config.set("health_bar_always_visible", false);
         config.set("health_bar_display_duration", 1);
-        config.set("health_bar_length", 10);
+        config.set("health_bar_length", BAR_LENGTH);
         config.set("health_bar_prefix", "");
         config.set("health_bar_suffix", "");
         config.set("health_bar_alive_symbol", "A");
         config.set("health_bar_dead_symbol", "D");
-        config.set("hologram_follow_speed", 3);
+        config.set("hologram_follow_speed", FOLLOW_INTERVAL_TICKS);
         listener = new HealthBarListener();
     }
 
     @AfterEach
     void tearDown() {
+        listener.shutdown();
         HolographUtil.HOLOGRAPH_UTIL.clearTracking();
-        singleton.close();
-        bukkit.close();
+        fixture.close();
     }
 
     @Test
@@ -151,13 +103,14 @@ class HealthBarListenerTest {
     void cancelledHologramSpawnDoesNotRetryOrRetainCleanupHandlers() throws Exception {
         holograms();
         alwaysVisible();
-        cancelSpawns = true;
+        fixture.cancelSpawns = true;
         Model mob = mob("Original");
         damage(mob, 1);
         advance(40);
 
         assertEquals(1, stands.size());
-        assertTrue(scheduled.getFirst().cancelled.get());
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
         assertEquals("Original", mob.name);
         assertEquals(0, registeredCleanupCount());
         damage(mob, 1);
@@ -167,7 +120,7 @@ class HealthBarListenerTest {
         listener.clearDisplay(mob.entity, true);
         listener.shutdown();
         assertEquals(0, registeredCleanupCount());
-        verify(logger).warning(org.mockito.ArgumentMatchers.contains("spawn was cancelled"));
+        verify(logger).warning(contains("spawn was cancelled"));
     }
 
     @Test
@@ -179,7 +132,7 @@ class HealthBarListenerTest {
         listener.onWorldUnload(new WorldUnloadEvent(world));
         assertEquals("Original", mob.name);
         assertFalse(mob.visible);
-        assertTrue(mob.data.containsKey(key("health-bar-activated")));
+        assertTrue(mob.data.has(key("health-bar-activated")));
 
         holograms();
         listener.refreshPersistedHolograms();
@@ -189,7 +142,8 @@ class HealthBarListenerTest {
         advance(1);
         assertFalse(stands.getFirst().valid);
         assertEquals(0, registeredCleanupCount());
-        assertTrue(scheduled.getLast().cancelled.get());
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
     }
 
     @Test
@@ -206,7 +160,8 @@ class HealthBarListenerTest {
 
         assertEquals(0, registeredCleanupCount());
         assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stands.getFirst().entity));
-        assertTrue(scheduled.getLast().cancelled.get());
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
     }
 
     @Test
@@ -214,9 +169,9 @@ class HealthBarListenerTest {
         alwaysVisible();
         Model mob = mob("Old health bar");
         mob.visible = true;
-        mob.data.put(key("health-name-overridden"), true);
-        mob.data.put(key("health-original-name"), "Saved name");
-        mob.data.put(key("health-original-visible"), false);
+        mob.data.set(key("health-name-overridden"), BOOLEAN, true);
+        mob.data.set(key("health-original-name"), STRING, "Saved name");
+        mob.data.set(key("health-original-visible"), BOOLEAN, false);
         listener.restorePersistedNames();
         assertEquals("Saved name", mob.name);
         listener.refreshPersistedHolograms();
@@ -256,7 +211,8 @@ class HealthBarListenerTest {
         advance(20);
         assertEquals("Original", mob.name);
         assertFalse(mob.visible);
-        assertTrue(scheduled.getFirst().cancelled.get());
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
     }
 
     @Test
@@ -271,7 +227,7 @@ class HealthBarListenerTest {
         listener.clearDisplay(mob.entity, true);
         assertEquals("Name tag", mob.name);
         assertFalse(mob.visible);
-        assertFalse(mob.data.containsKey(key("health-bar-activated")));
+        assertFalse(mob.data.has(key("health-bar-activated")));
 
         damage(mob, 2);
         advance(1);
@@ -299,13 +255,13 @@ class HealthBarListenerTest {
     void loadedLegacyOverlayRestoresStoredOriginalBeforeOwnershipWasRecorded() {
         Model mob = mob("Stuck legacy bar");
         mob.visible = true;
-        mob.data.put(key("health-name-overridden"), true);
-        mob.data.put(key("health-original-name"), "Original");
-        mob.data.put(key("health-original-visible"), false);
+        mob.data.set(key("health-name-overridden"), BOOLEAN, true);
+        mob.data.set(key("health-original-name"), STRING, "Original");
+        mob.data.set(key("health-original-visible"), BOOLEAN, false);
         load(mob);
         assertEquals("Original", mob.name);
         assertFalse(mob.visible);
-        assertFalse(mob.data.containsKey(key("health-name-overridden")));
+        assertFalse(mob.data.has(key("health-name-overridden")));
         assertTrue(scheduled.isEmpty());
     }
 
@@ -313,13 +269,13 @@ class HealthBarListenerTest {
     void firstDamageResolvesLegacyBackupBeforeCapturingANewOriginal() {
         Model mob = mob("Stuck legacy bar");
         mob.visible = true;
-        mob.data.put(key("health-name-overridden"), true);
-        mob.data.put(key("health-original-name"), "Original");
-        mob.data.put(key("health-original-visible"), false);
+        mob.data.set(key("health-name-overridden"), BOOLEAN, true);
+        mob.data.set(key("health-original-name"), STRING, "Original");
+        mob.data.set(key("health-original-visible"), BOOLEAN, false);
         damage(mob, 1);
         advance(1);
         assertEquals("AAAAAAAAAA", mob.name);
-        assertEquals("Original", mob.data.get(key("health-original-name")));
+        assertEquals("Original", mob.data.get(key("health-original-name"), STRING));
         listener.clearDisplay(mob.entity, true);
         assertEquals("Original", mob.name);
         assertFalse(mob.visible);
@@ -328,22 +284,22 @@ class HealthBarListenerTest {
     @Test
     void canonicalizedTruncatedMulticolourOverlaysNeverReplaceTheOriginalBackup() {
         Model mob = mob("original");
-        mob.nameCanonicalizer = value -> value == null || value.isEmpty() ? null
-            : value.substring(0, Math.min(value.length(), 256)).toLowerCase(Locale.ROOT);
+        mob.nameCanonicalizer = value -> value == null || value.isEmpty() ? null : value.substring(0, Math.min(value.length(), CANONICAL_NAME_LIMIT))
+                                                                                        .toLowerCase(Locale.ROOT);
         config.set("health_bar_prefix", "P".repeat(200));
         config.set("health_bar_length", 100);
         config.set("health_bar_alive_symbol", "&(1,2,3)Alive&(4,5,6)More");
         damage(mob, 1);
         advance(1);
-        assertEquals(256, mob.name.length());
+        assertEquals(CANONICAL_NAME_LIMIT, mob.name.length());
         assertEquals(mob.name.toLowerCase(Locale.ROOT), mob.name);
-        assertEquals(mob.name, mob.data.get(key("health-last-overlay")));
+        assertEquals(mob.name, mob.data.get(key("health-last-overlay"), STRING));
         advance(3);
         mob.health = 10;
         damage(mob, 1);
         advance(1);
-        assertEquals("original", mob.data.get(key("health-original-name")));
-        assertEquals(mob.name, mob.data.get(key("health-last-overlay")));
+        assertEquals("original", mob.data.get(key("health-original-name"), STRING));
+        assertEquals(mob.name, mob.data.get(key("health-last-overlay"), STRING));
         listener.clearDisplay(mob.entity, true);
         assertEquals("original", mob.name);
         assertFalse(mob.visible);
@@ -358,12 +314,12 @@ class HealthBarListenerTest {
         damage(mob, 1);
         advance(1);
         assertNull(mob.name);
-        assertEquals("", mob.data.get(key("health-last-overlay")));
+        assertEquals("", mob.data.get(key("health-last-overlay"), STRING));
         advance(3);
         damage(mob, 1);
         advance(1);
-        assertEquals("Original", mob.data.get(key("health-original-name")));
-        assertEquals("", mob.data.get(key("health-last-overlay")));
+        assertEquals("Original", mob.data.get(key("health-original-name"), STRING));
+        assertEquals("", mob.data.get(key("health-last-overlay"), STRING));
         listener.clearDisplay(mob.entity, true);
         assertEquals("Original", mob.name);
         assertFalse(mob.visible);
@@ -385,7 +341,8 @@ class HealthBarListenerTest {
         assertTrue(stands.getFirst().valid);
         advance(1);
         assertFalse(stands.getFirst().valid);
-        assertTrue(scheduled.getFirst().cancelled.get());
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
         assertNull(mob.name);
     }
 
@@ -404,8 +361,9 @@ class HealthBarListenerTest {
         assertEquals(1, stands.size());
         assertFalse(stand.valid);
         assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stand.entity));
-        assertTrue(scheduled.getFirst().cancelled.get());
-        assertFalse(mob.data.containsKey(key("health-bar-activated")));
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        assertFalse(mob.data.has(key("health-bar-activated")));
         load(mob);
         assertEquals(1, stands.size());
     }
@@ -418,13 +376,40 @@ class HealthBarListenerTest {
         damage(mob, 1);
         advance(1);
         Model stand = stands.getFirst();
-        when(stand.entity.teleport(any(Location.class))).thenReturn(false);
+        stand.teleportSucceeds = false;
+        mob.location.add(1, 0, 0);
         advance(5);
         assertFalse(stand.valid);
         assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stand.entity));
         assertEquals(1, stands.size());
-        assertTrue(scheduled.getFirst().cancelled.get());
-        verify(logger).warning(org.mockito.ArgumentMatchers.contains("Could not move hologram"));
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        verify(logger).warning(contains("Could not move hologram"));
+    }
+
+    @Test
+    void shutdownDuringFollowTeleportStopsBothBarsWithoutRestartingTicker() {
+        alwaysVisible();
+        holograms();
+        Model first = mob("First original");
+        Model second = mob("Second original");
+        damage(first, 1);
+        damage(second, 1);
+        advance(1);
+        assertEquals(2, stands.size());
+        first.location.add(1, 0, 0);
+        second.location.add(1, 0, 0);
+        fixture.onTeleport = entity -> listener.shutdown();
+
+        assertDoesNotThrow(() -> advance(2 * FOLLOW_INTERVAL_TICKS));
+
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertTrue(fixture.clock.allCancelled());
+        assertEquals(1, scheduled.size());
+        assertEquals(2, stands.size());
+        assertEquals("First original", first.name);
+        assertEquals("Second original", second.name);
     }
 
     @Test
@@ -436,7 +421,7 @@ class HealthBarListenerTest {
         advance(1);
         listener.shutdown();
         assertEquals("Original", activated.name);
-        assertTrue(activated.data.containsKey(key("health-bar-activated")));
+        assertTrue(activated.data.has(key("health-bar-activated")));
         HealthBarListener restarted = new HealthBarListener();
         restarted.restorePersistedNames();
         restarted.refreshPersistedHolograms();
@@ -474,7 +459,7 @@ class HealthBarListenerTest {
         config.set("enable_health_bar", false);
         listener.refreshPersistedHolograms();
         assertEquals("Original", mob.name);
-        assertFalse(mob.data.containsKey(key("health-bar-activated")));
+        assertFalse(mob.data.has(key("health-bar-activated")));
     }
 
     @Test
@@ -499,16 +484,16 @@ class HealthBarListenerTest {
         alwaysVisible();
         holograms();
         Model mob = mob(null);
-        mob.data.put(key("always-visible-health-hologram"), true);
+        mob.data.set(key("always-visible-health-hologram"), BOOLEAN, true);
         load(mob);
         load(mob);
         assertEquals(1, stands.size());
-        assertFalse(mob.data.containsKey(key("always-visible-health-hologram")));
-        assertTrue(mob.data.containsKey(key("health-bar-activated")));
+        assertFalse(mob.data.has(key("always-visible-health-hologram")));
+        assertTrue(mob.data.has(key("health-bar-activated")));
         config.set("enable_health_bar", false);
         advance(1);
         assertFalse(stands.getFirst().valid);
-        assertFalse(mob.data.containsKey(key("health-bar-activated")));
+        assertFalse(mob.data.has(key("health-bar-activated")));
         load(mob);
         assertEquals(1, stands.size());
     }
@@ -520,15 +505,13 @@ class HealthBarListenerTest {
         damage(mob, 1);
         advance(1);
         heal(mob, 2);
-        EntitiesUnloadEvent event = mock(EntitiesUnloadEvent.class);
-        when(event.getEntities()).thenReturn(List.of(mob.entity));
-        listener.onEntitiesUnload(event);
+        listener.onEntitiesUnload(new EntitiesUnloadEvent(mock(Chunk.class), List.of(mob.entity)));
         loaded.remove(mob.id);
         advance(4);
         assertEquals("Original", mob.name);
-        assertTrue(scheduled.getFirst().cancelled.get());
-        Model replacement = new Model(mob.id, LivingEntity.class, mob.name, mob.data);
-        mobs.add(replacement);
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        Model replacement = fixture.entity(mob.id, LivingEntity.class, mob.name, mob.data);
         load(replacement);
         assertEquals("AAAAAAAAAA", replacement.name);
         listener.clearDisplay(replacement.entity, true);
@@ -541,18 +524,16 @@ class HealthBarListenerTest {
         Model mob = mob("Original");
         damage(mob, 1);
         advance(1);
-        org.mockito.Mockito.clearInvocations(mob.entity);
-        EntityRemoveEvent event = mock(EntityRemoveEvent.class);
-        when(event.getEntity()).thenReturn(mob.entity);
-        listener.onEntityRemove(event);
+        clearInvocations(mob.entity);
+        listener.onEntityRemove(new EntityRemoveEvent(mob.entity, EntityRemoveEvent.Cause.PLUGIN));
         loaded.remove(mob.id);
         advance(3);
         verify(mob.entity, never()).setCustomName(any());
         verify(mob.entity, never()).setCustomNameVisible(true);
-        assertTrue(scheduled.getFirst().cancelled.get());
-        Model replacement = new Model(mob.id, LivingEntity.class, mob.name, mob.data);
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        Model replacement = fixture.entity(mob.id, LivingEntity.class, mob.name, mob.data);
         replacement.visible = true;
-        mobs.add(replacement);
         load(replacement);
         listener.clearDisplay(replacement.entity, true);
         assertEquals("Original", replacement.name);
@@ -563,37 +544,53 @@ class HealthBarListenerTest {
         alwaysVisible();
         Model mob = mob("Original");
         heal(mob, 2);
-        EntityResurrectEvent resurrection = mock(EntityResurrectEvent.class);
-        when(resurrection.getEntity()).thenReturn(mob.entity);
+        EntityResurrectEvent resurrection = new EntityResurrectEvent(mob.entity, EquipmentSlot.HAND);
+        resurrection.setCancelled(false);
         listener.updateHealthBarOnResurrection(resurrection);
         mob.health = 1;
         advance(1);
         assertEquals("ADDDDDDDDD", mob.name);
         assertEquals(1, scheduled.size());
         heal(mob, 2);
-        EntityDeathEvent death = mock(EntityDeathEvent.class);
-        when(death.getEntity()).thenReturn(mob.entity);
+        EntityDeathEvent death = new EntityDeathEvent(mob.entity, fixture.damageSource, List.of());
         mob.dead = true;
         listener.handleDeathEvents(death);
         advance(3);
         assertEquals("Original", mob.name);
-        assertFalse(mob.data.containsKey(key("health-bar-activated")));
+        assertFalse(mob.data.has(key("health-bar-activated")));
         load(mob);
         assertEquals("Original", mob.name);
     }
 
     @Test
-    void cancelledAndNoOpEventsDoNotActivateBarsAndTemporaryHealDoesNotStartOne() {
+    void cancelledAndNoOpEventsDoNotActivateBarsAndTemporaryHealDoesNotStartOne() throws Exception {
         Model mob = mob("Original");
         damage(mob, 0);
         EntityDamageEvent cancelled = damageEvent(mob, 4);
-        when(cancelled.isCancelled()).thenReturn(true);
+        cancelled.setCancelled(true);
         listener.displayHealthBar(cancelled);
         heal(mob, 2);
-        EntityResurrectEvent resurrection = mock(EntityResurrectEvent.class);
-        when(resurrection.getEntity()).thenReturn(mob.entity);
-        when(resurrection.isCancelled()).thenReturn(true);
-        listener.updateHealthBarOnResurrection(resurrection);
+        EntityResurrectEvent resurrection = new EntityResurrectEvent(mob.entity, EquipmentSlot.HAND);
+        resurrection.setCancelled(true);
+        EventHandler policy = HealthBarListener.class.getMethod("updateHealthBarOnResurrection", EntityResurrectEvent.class)
+                                                     .getAnnotation(EventHandler.class);
+        RegisteredListener registration = new RegisteredListener(listener, (target, event) -> listener.updateHealthBarOnResurrection(resurrection), policy.priority(), fixture.plugin, policy.ignoreCancelled());
+        registration.callEvent(resurrection);
+        advance(2);
+        assertTrue(scheduled.isEmpty());
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void bukkitRegistrationFiltersCancelledHealing() throws Exception {
+        alwaysVisible();
+        Model mob = mob("Original");
+        EntityRegainHealthEvent healing = new EntityRegainHealthEvent(mob.entity, 2, EntityRegainHealthEvent.RegainReason.CUSTOM);
+        healing.setCancelled(true);
+        EventHandler policy = HealthBarListener.class.getMethod("updateHealthBarOnHeal", EntityRegainHealthEvent.class)
+                                                     .getAnnotation(EventHandler.class);
+        RegisteredListener registration = new RegisteredListener(listener, (target, event) -> listener.updateHealthBarOnHeal(healing), policy.priority(), fixture.plugin, policy.ignoreCancelled());
+        registration.callEvent(healing);
         advance(2);
         assertTrue(scheduled.isEmpty());
         assertEquals("Original", mob.name);
@@ -606,7 +603,7 @@ class HealthBarListenerTest {
         listener.shutdown();
         advance(2);
         assertEquals("Original", mob.name);
-        assertFalse(mob.data.containsKey(key("health-name-overridden")));
+        assertFalse(mob.data.has(key("health-name-overridden")));
         listener.displayHealthBar(damageEvent(mob, 1));
         assertEquals(1, scheduled.size());
     }
@@ -620,19 +617,19 @@ class HealthBarListenerTest {
         assertEquals("DDDDDDDDDD", mob.name);
         listener.clearDisplay(mob.entity, true);
         mob.health = 5;
-        when(mob.maximum.getValue()).thenReturn(Double.NaN);
+        mob.maximumHealth = Double.NaN;
         damage(mob, 1);
         advance(1);
         assertEquals("Original", mob.name);
-        verify(logger).warning(org.mockito.ArgumentMatchers.contains("invalid MAX_HEALTH"));
-        assertTrue(scheduled.getLast().cancelled.get());
+        verify(logger).warning(contains("invalid MAX_HEALTH"));
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
     }
 
     @Test
     void inlinePlayersAreNeverRenamedWhileHologramsRecoverOnRejoin() {
         alwaysVisible();
-        Model player = new Model(Player.class, "Player plugin name");
-        mobs.add(player);
+        Model player = fixture.entity(Player.class, "Player plugin name");
         damage(player, 1);
         heal(player, 1);
         advance(1);
@@ -642,12 +639,10 @@ class HealthBarListenerTest {
         damage(player, 1);
         advance(1);
         assertEquals(1, stands.size());
-        PlayerQuitEvent quit = mock(PlayerQuitEvent.class);
-        when(quit.getPlayer()).thenReturn((Player) player.entity);
+        PlayerQuitEvent quit = new PlayerQuitEvent((Player) player.entity, null);
         listener.onPlayerQuit(quit);
         assertFalse(stands.getFirst().valid);
-        PlayerJoinEvent join = mock(PlayerJoinEvent.class);
-        when(join.getPlayer()).thenReturn((Player) player.entity);
+        PlayerJoinEvent join = new PlayerJoinEvent((Player) player.entity, null);
         listener.onPlayerJoin(join);
         assertEquals(1, stands.size());
         advance(1);
@@ -659,16 +654,18 @@ class HealthBarListenerTest {
     @Test
     void missingMaximumAndUnloadBeforeFirstRefreshCannotLeaveTrackedBars() {
         Model mob = mob("Original");
-        when(mob.entity.getAttribute(any())).thenReturn(null);
+        mob.hasMaximum = false;
         damage(mob, 1);
         advance(1);
-        verify(logger).warning(org.mockito.ArgumentMatchers.contains("missing or invalid MAX_HEALTH"));
-        assertTrue(scheduled.getFirst().cancelled.get());
-        when(mob.entity.getAttribute(any())).thenReturn(mob.maximum);
+        verify(logger).warning(contains("missing or invalid MAX_HEALTH"));
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        mob.hasMaximum = true;
         damage(mob, 1);
         mob.valid = false;
         advance(1);
-        assertTrue(scheduled.getLast().cancelled.get());
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
         assertEquals("Original", mob.name);
     }
 
@@ -681,9 +678,7 @@ class HealthBarListenerTest {
     }
 
     private Model mob(String name) {
-        Model model = new Model(LivingEntity.class, name);
-        mobs.add(model);
-        return model;
+        return fixture.mob(name);
     }
 
     private void damage(Model model, double amount) {
@@ -691,118 +686,18 @@ class HealthBarListenerTest {
     }
 
     private EntityDamageEvent damageEvent(Model model, double amount) {
-        EntityDamageEvent event = mock(EntityDamageEvent.class);
-        when(event.getEntity()).thenReturn(model.entity);
-        when(event.getFinalDamage()).thenReturn(amount);
-        return event;
+        return new EntityDamageEvent(model.entity, EntityDamageEvent.DamageCause.CUSTOM, fixture.damageSource, amount);
     }
 
     private void heal(Model model, double amount) {
-        EntityRegainHealthEvent event = mock(EntityRegainHealthEvent.class);
-        when(event.getEntity()).thenReturn(model.entity);
-        when(event.getAmount()).thenReturn(amount);
-        listener.updateHealthBarOnHeal(event);
+        listener.updateHealthBarOnHeal(new EntityRegainHealthEvent(model.entity, amount, EntityRegainHealthEvent.RegainReason.CUSTOM));
     }
 
     private void load(Model model) {
-        EntitiesLoadEvent event = mock(EntitiesLoadEvent.class);
-        when(event.getEntities()).thenReturn(List.of(model.entity));
-        listener.onEntitiesLoad(event);
+        listener.onEntitiesLoad(new EntitiesLoadEvent(mock(Chunk.class), List.of(model.entity)));
     }
 
     private void advance(int ticks) {
-        for (int i = 0; i < ticks; i++) {
-            for (Scheduled task : List.copyOf(scheduled)) {
-                if (!task.cancelled.get()) {
-                    task.runnable.run();
-                }
-            }
-        }
-    }
-
-    private static NamespacedKey key(String key) {
-        return new NamespacedKey("damageindicator", key);
-    }
-
-    private static final class Scheduled {
-
-        private final Runnable runnable;
-        private final BukkitTask task = mock(BukkitTask.class);
-        private final AtomicBoolean cancelled = new AtomicBoolean();
-
-        private Scheduled(Runnable runnable) {
-            this.runnable = runnable;
-            doAnswer(call -> {
-                cancelled.set(true);
-                return null;
-            }).when(task)
-              .cancel();
-        }
-    }
-
-    private final class Model {
-
-        private final UUID id;
-        private final LivingEntity entity;
-        private final AttributeInstance maximum = mock(AttributeInstance.class);
-        private final Map<NamespacedKey, Object> data;
-        private String name;
-        private boolean visible;
-        private boolean valid = true;
-        private boolean dead;
-        private double health = 20;
-        private UnaryOperator<String> nameCanonicalizer = UnaryOperator.identity();
-
-        private Model(Class<? extends LivingEntity> type, String name) {
-            this(UUID.randomUUID(), type, name, new HashMap<>());
-        }
-
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        private Model(UUID id, Class<? extends LivingEntity> type, String name, Map<NamespacedKey, Object> data) {
-            this.id = id;
-            this.name = name;
-            this.data = data;
-            entity = mock(type);
-            PersistentDataContainer pdc = mock(PersistentDataContainer.class);
-            when(pdc.get(any(NamespacedKey.class), any(PersistentDataType.class))).thenAnswer(call -> data.get(call.getArgument(0)));
-            doAnswer(call -> {
-                data.put(call.getArgument(0), call.getArgument(2));
-                return null;
-            }).when(pdc)
-              .set(any(NamespacedKey.class), any(PersistentDataType.class), any());
-            doAnswer(call -> {
-                data.remove(call.getArgument(0));
-                return null;
-            }).when(pdc)
-              .remove(any());
-            when(entity.getUniqueId()).thenReturn(id);
-            when(entity.getPersistentDataContainer()).thenReturn(pdc);
-            when(entity.getHealth()).thenAnswer(call -> health);
-            when(entity.isValid()).thenAnswer(call -> valid);
-            when(entity.isDead()).thenAnswer(call -> dead);
-            when(entity.getCustomName()).thenAnswer(call -> this.name);
-            when(entity.isCustomNameVisible()).thenAnswer(call -> visible);
-            when(entity.getAttribute(any())).thenReturn(maximum);
-            when(maximum.getValue()).thenReturn(20.0);
-            when(entity.getLocation()).thenAnswer(call -> new Location(world, 0, 0, 0));
-            when(entity.teleport(any(Location.class))).thenReturn(true);
-            doAnswer(call -> {
-                this.name = nameCanonicalizer.apply(call.getArgument(0));
-                return null;
-            }).when(entity)
-              .setCustomName(any());
-            doAnswer(call -> {
-                visible = call.getArgument(0);
-                return null;
-            }).when(entity)
-              .setCustomNameVisible(org.mockito.ArgumentMatchers.anyBoolean());
-            doAnswer(call -> {
-                valid = false;
-                loaded.remove(id);
-                return null;
-            }).when(entity)
-              .remove();
-            loaded.put(id, entity);
-        }
+        fixture.clock.advance(ticks);
     }
 }

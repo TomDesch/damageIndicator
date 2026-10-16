@@ -1,13 +1,16 @@
 package io.github.stealingdapenta.damageindicator.utils;
 
 import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener;
-import java.util.Map;
+import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.HashMap;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -32,25 +35,26 @@ public enum HolographUtil {
      * @return the configured ArmorStand
      */
     public ArmorStand createArmorStandHologram(Location location, Component name) {
-        ArmorStand hologram = location.getWorld()
-                       .spawn(location, ArmorStand.class, armorStand -> {
-                           armorStand.setCustomName(TextUtil.TEXT_UTIL.serializeComponent(name));
-                           armorStand.setCustomNameVisible(true);
-                           armorStand.setVisible(false);
-                           armorStand.setMarker(true);
-                           armorStand.setGravity(false);
-                           armorStand.setSmall(true);
-                           armorStand.setCollidable(false);
-                           armorStand.setInvulnerable(true);
-                           armorStand.setPersistent(false);
-                           armorStand.getPersistentDataContainer()
-                                     .set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
-                       });
+        World world = Objects.requireNonNull(location.getWorld(), "A hologram location must have a world");
+        ArmorStand hologram = world.spawn(location, ArmorStand.class, armorStand -> {
+            armorStand.setCustomName(TextUtil.TEXT_UTIL.serializeComponent(name));
+            armorStand.setCustomNameVisible(true);
+            armorStand.setVisible(false);
+            armorStand.setMarker(true);
+            armorStand.setGravity(false);
+            armorStand.setSmall(true);
+            armorStand.setCollidable(false);
+            armorStand.setInvulnerable(true);
+            armorStand.setPersistent(false);
+            armorStand.getPersistentDataContainer()
+                      .set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
+        });
         track(hologram);
         if (!hologram.isValid() && !spawnFailureReported) {
             spawnFailureReported = true;
-            io.github.stealingdapenta.damageindicator.DamageIndicator.getInstance().getLogger()
-                    .warning("Hologram spawn was cancelled or produced an invalid entity; displays cannot be created here.");
+            DamageIndicator.getInstance()
+                           .getLogger()
+                           .warning("Hologram spawn was cancelled or produced an invalid entity; displays cannot be created here.");
         }
         return hologram;
     }
@@ -65,15 +69,29 @@ public enum HolographUtil {
         return entity instanceof ArmorStand && entity.isValid() && activeHolograms.contains(entity.getUniqueId());
     }
 
+    /**
+     * Persistent ownership survives restarts; active ownership is session-local.
+     */
+    public boolean isTaggedHologram(Entity entity) {
+        return entity instanceof ArmorStand && Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                                                         .get(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN));
+    }
+
     public void forget(Entity entity) {
         forget(entity.getUniqueId());
     }
 
+    /**
+     * Drops ownership even when the entity's world is no longer available.
+     */
     public void forget(UUID id) {
         activeHolograms.remove(id);
         cleanupHandlers.remove(id);
     }
 
+    /**
+     * Registers the owner's detach action; never retains cancelled spawns.
+     */
     public void onCleanup(ArmorStand hologram, Runnable cleanup) {
         if (!hologram.isValid()) {
             throw new IllegalArgumentException("Cannot register cleanup for an invalid hologram");
@@ -81,6 +99,9 @@ public enum HolographUtil {
         cleanupHandlers.put(hologram.getUniqueId(), cleanup);
     }
 
+    /**
+     * Administrative cleanup detaches the owner before removing the hologram.
+     */
     public void cleanup(ArmorStand hologram) {
         Runnable cleanup = cleanupHandlers.remove(hologram.getUniqueId());
         if (cleanup != null) {
@@ -89,6 +110,9 @@ public enum HolographUtil {
         remove(hologram);
     }
 
+    /**
+     * Removal events must not remove the same entity recursively.
+     */
     public void removed(ArmorStand hologram) {
         UUID id = hologram.getUniqueId();
         Runnable cleanup = cleanupHandlers.remove(id);
@@ -110,6 +134,9 @@ public enum HolographUtil {
         }
     }
 
+    /**
+     * Called after all display owners have stopped, including on configuration reload.
+     */
     public void clearTracking() {
         activeHolograms.clear();
         cleanupHandlers.clear();
@@ -117,6 +144,9 @@ public enum HolographUtil {
         spawnFailureReported = false;
     }
 
+    /**
+     * Skips redundant teleports; callers detach displays when following fails.
+     */
     public boolean teleportIfMoved(ArmorStand hologram, Location target) {
         if (target.equals(hologram.getLocation())) {
             return true;
@@ -124,8 +154,9 @@ public enum HolographUtil {
         if (hologram.teleport(target)) {
             return true;
         }
-        io.github.stealingdapenta.damageindicator.DamageIndicator.getInstance().getLogger()
-                .warning("Could not move hologram " + hologram.getUniqueId() + "; its display will be removed.");
+        DamageIndicator.getInstance()
+                       .getLogger()
+                       .warning("Could not move hologram " + hologram.getUniqueId() + "; its display will be removed.");
         return false;
     }
 

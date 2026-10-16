@@ -1,10 +1,13 @@
 package io.github.stealingdapenta.damageindicator.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Set;
 import java.util.UUID;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -23,11 +26,10 @@ class AttackerVictimPairTest {
         when(victim.getUniqueId()).thenReturn(victimId);
         AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
 
-        org.junit.jupiter.api.Assertions.assertTrue(pair.involvesAny(java.util.Set.of(attackerId)));
-        org.junit.jupiter.api.Assertions.assertTrue(pair.involvesAny(java.util.Set.of(victimId)));
-        org.junit.jupiter.api.Assertions.assertFalse(pair.involvesAny(java.util.Set.of(UUID.randomUUID())));
-        org.junit.jupiter.api.Assertions.assertFalse(new AttackerVictimPair(null, victim)
-                .involvesAny(java.util.Set.of(UUID.randomUUID())));
+        assertTrue(pair.involvesAny(Set.of(attackerId)));
+        assertTrue(pair.involvesAny(Set.of(victimId)));
+        assertFalse(pair.involvesAny(Set.of(UUID.randomUUID())));
+        assertFalse(new AttackerVictimPair(null, victim).involvesAny(Set.of(UUID.randomUUID())));
     }
 
     @Test
@@ -160,8 +162,8 @@ class AttackerVictimPairTest {
 
         AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
 
-        assertEquals(true, pair.involves(attackerId));
-        assertEquals(true, pair.involves(victimId));
-        assertEquals(false, pair.involves(UUID.randomUUID()));
+        assertTrue(pair.involves(attackerId));
+        assertTrue(pair.involves(victimId));
+        assertFalse(pair.involves(UUID.randomUUID()));
     }
 }
