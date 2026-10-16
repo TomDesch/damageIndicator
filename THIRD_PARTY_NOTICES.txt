@@ -1,0 +1,45 @@
+DamageIndicator - bundled third-party software
+
+DamageIndicator's own code is licensed under the MIT License; see LICENSE.
+Bundled third-party components retain their respective licenses below.
+Paths below identify packaged license resources under META-INF\licenses.
+
+Adventure API, Adventure Key, and Adventure Legacy Text Serializer 5.2.0
+  net.kyori:adventure-api:5.2.0
+  net.kyori:adventure-key:5.2.0
+  net.kyori:adventure-text-serializer-legacy:5.2.0
+  Copyright (c) 2017-2025 KyoriPowered
+  License: MIT
+  License file: META-INF\licenses\adventure-5.2.0-LICENSE.txt
+  Source: https://github.com/PaperMC/adventure/tree/v5.2.0
+  Bundling modification: net.kyori packages and their references are relocated
+  to io.github.stealingdapenta.damageindicator.internal.kyori.
+
+JetBrains Java Annotations 26.1.0
+  org.jetbrains:annotations:26.1.0
+  Copyright 2000-2016 JetBrains s.r.o. (upstream LICENSE.txt)
+  Copyright 2000-2021 JetBrains s.r.o. (source headers)
+  License: Apache License, Version 2.0
+  License file: META-INF\licenses\jetbrains-annotations-26.1.0-LICENSE.txt
+  Source: https://github.com/JetBrains/java-annotations/tree/26.1.0
+  Bundling modification: org.jetbrains.annotations and org.intellij.lang.annotations
+  packages and references are relocated beneath
+  io.github.stealingdapenta.damageindicator.internal.
+
+JSpecify Annotations 1.0.1
+  org.jspecify:jspecify:1.0.1
+  Copyright 2018-2020 The JSpecify Authors.
+  Copyright 2022 The JSpecify Authors.
+  License: Apache License, Version 2.0
+  License file: META-INF\licenses\jspecify-1.0.1-LICENSE.txt
+  Copyright-holder list: META-INF\licenses\jspecify-1.0.1-AUTHORS.txt
+  Source: https://github.com/jspecify/jspecify/tree/v1.0.1
+  Bundling modification: org.jspecify.annotations and references are relocated
+  to io.github.stealingdapenta.damageindicator.internal.jspecify.annotations.
+
+Module descriptors and original archive-signature metadata are omitted from
+the combined archive; these license and attribution texts are preserved.
+
+These upstream versions do not supply separate NOTICE files.
+Spigot API and its server-provided libraries, and test-only dependencies,
+are not shipped in the plugin and are not part of this bundled inventory.
