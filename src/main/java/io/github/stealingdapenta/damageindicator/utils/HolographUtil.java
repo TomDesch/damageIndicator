@@ -21,6 +21,7 @@ public enum HolographUtil {
 
     private final Set<UUID> activeHolograms = new HashSet<>();
     private final Map<UUID, Runnable> cleanupHandlers = new HashMap<>();
+    private final Set<UUID> removing = new HashSet<>();
 
     /**
      * Creates an invisible, non-colliding ArmorStand with the given name at the specified location.
@@ -75,9 +76,23 @@ public enum HolographUtil {
         remove(hologram);
     }
 
+    public void removed(ArmorStand hologram) {
+        UUID id = hologram.getUniqueId();
+        Runnable cleanup = cleanupHandlers.remove(id);
+        activeHolograms.remove(id);
+        removing.add(id);
+        try {
+            if (cleanup != null) {
+                cleanup.run();
+            }
+        } finally {
+            removing.remove(id);
+        }
+    }
+
     public void remove(ArmorStand hologram) {
         forget(hologram);
-        if (hologram.isValid()) {
+        if (!removing.contains(hologram.getUniqueId()) && hologram.isValid()) {
             hologram.remove();
         }
     }
@@ -85,6 +100,7 @@ public enum HolographUtil {
     public void clearTracking() {
         activeHolograms.clear();
         cleanupHandlers.clear();
+        removing.clear();
     }
 
     public boolean teleportIfMoved(ArmorStand hologram, Location target) {

@@ -14,6 +14,23 @@ import org.junit.jupiter.api.Test;
 class AttackerVictimPairTest {
 
     @Test
+    void batchCleanupMatchesEitherIdentityAndSupportsNoAttacker() {
+        Entity attacker = mock(Entity.class);
+        Entity victim = mock(Entity.class);
+        UUID attackerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+        AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
+
+        org.junit.jupiter.api.Assertions.assertTrue(pair.involvesAny(java.util.Set.of(attackerId)));
+        org.junit.jupiter.api.Assertions.assertTrue(pair.involvesAny(java.util.Set.of(victimId)));
+        org.junit.jupiter.api.Assertions.assertFalse(pair.involvesAny(java.util.Set.of(UUID.randomUUID())));
+        org.junit.jupiter.api.Assertions.assertFalse(new AttackerVictimPair(null, victim)
+                .involvesAny(java.util.Set.of(UUID.randomUUID())));
+    }
+
+    @Test
     void testEquals_SameAttackerAndVictim_ReturnsTrue() {
         UUID attackerId = UUID.randomUUID();
         UUID victimId = UUID.randomUUID();

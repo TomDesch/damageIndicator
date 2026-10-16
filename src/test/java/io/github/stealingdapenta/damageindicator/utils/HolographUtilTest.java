@@ -79,6 +79,20 @@ class HolographUtilTest {
     }
 
     @Test
+    void removalEventDetachesOwnershipWithoutRemovingTheEntityRecursively() {
+        ArmorStand stand = mock(ArmorStand.class);
+        when(stand.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stand.isValid()).thenReturn(true);
+        HOLOGRAPH_UTIL.track(stand);
+        HOLOGRAPH_UTIL.onCleanup(stand, () -> HOLOGRAPH_UTIL.remove(stand));
+
+        HOLOGRAPH_UTIL.removed(stand);
+
+        verify(stand, never()).remove();
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
     void unchangedHologramsDoNotTeleportButMovementStillFollows() {
         ArmorStand stand = mock(ArmorStand.class);
         World world = mock(World.class);
