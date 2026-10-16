@@ -1,10 +1,13 @@
 package io.github.stealingdapenta.damageindicator.config;
 
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.ValueType.*;
+
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import java.util.List;
 import java.util.Locale;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public enum ConfigKeys {
@@ -63,6 +66,19 @@ public enum ConfigKeys {
     HOLOGRAM_VELOCITY_Y("0.15"),
     HOLOGRAM_GRAVITY("0.01");
 
+    private static final double MINIMUM_POSITIVE_SETTING = 1;
+    private static final double MINIMUM_NONNEGATIVE_SETTING = 0;
+    private static final double MAXIMUM_HOLOGRAM_OFFSET = 64;
+    private static final double MAXIMUM_HOLOGRAM_VELOCITY = 10;
+    private static final double MAXIMUM_HOLOGRAM_GRAVITY = 10;
+    private static final double MAXIMUM_DAMAGE_MERGE_TIMEOUT_SECONDS = 60;
+    private static final double MAXIMUM_HEALTH_BAR_DISPLAY_SECONDS = 10;
+    private static final double MAXIMUM_HEALTH_BAR_LENGTH = 100;
+    private static final double MAXIMUM_ANIMATION_TICKS = 200;
+    private static final int MAXIMUM_SYMBOL_TEXT_LENGTH = 32;
+    private static final int MAXIMUM_AFFIX_TEXT_LENGTH = 256;
+    private static final int MAXIMUM_SCALAR_TEXT_LENGTH = 64;
+
     private final String defaultValue;
     private final List<String> legacyKeys;
     private static volatile RuntimeConfiguration runtime;
@@ -105,12 +121,13 @@ public enum ConfigKeys {
             throw new IllegalArgumentException("Minimum must not exceed maximum");
         }
         RuntimeConfiguration snapshot = snapshot();
-        int value = snapshot.value(this).integer();
+        int value = snapshot.value(this)
+                            .integer();
         if (value >= minimum && value <= maximum) {
             return value;
         }
         snapshot.warnRangeOnce(this, minimum, maximum);
-        return Math.max(minimum, Math.min(maximum, Integer.parseInt(defaultValue)));
+        return Math.clamp(Integer.parseInt(defaultValue), minimum, maximum);
     }
 
     public double asDouble() {
@@ -122,7 +139,8 @@ public enum ConfigKeys {
             throw new IllegalArgumentException("Minimum must be finite");
         }
         RuntimeConfiguration snapshot = snapshot();
-        double value = snapshot.value(this).number();
+        double value = snapshot.value(this)
+                               .number();
         if (value >= minimum) {
             return value;
         }
@@ -139,6 +157,7 @@ public enum ConfigKeys {
     }
 
     static void install(RuntimeConfiguration replacement) {
+        // One volatile write publishes the fully prepared snapshot to every accessor.
         runtime = replacement;
     }
 
@@ -148,7 +167,7 @@ public enum ConfigKeys {
 
     private RuntimeConfiguration snapshot() {
         JavaPlugin plugin = DamageIndicator.getInstance();
-        var config = plugin.getConfig();
+        FileConfiguration config = plugin.getConfig();
         RuntimeConfiguration current = runtime;
         if (current != null && current.matches(plugin, config)) {
             return current;
@@ -159,45 +178,48 @@ public enum ConfigKeys {
 
     ValueType valueType() {
         return switch (this) {
-            case ENABLE_DAMAGE_INDICATOR, ENABLE_HEALTH_BAR, ENABLE_HOLOGRAM_HEALTH_BAR,
-                 ENABLE_HOLOGRAPHIC_CUSTOM_NAMES, HEALTH_BAR_ALWAYS_VISIBLE, ENABLE_DAMAGE_MERGE -> ValueType.BOOLEAN;
-            case HEALTH_BAR_DISPLAY_DURATION, HEALTH_BAR_LENGTH, HOLOGRAM_FOLLOW_SPEED,
-                 DAMAGE_MERGE_JUMP_DURATION -> ValueType.INTEGER;
-            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION, DAMAGE_MERGE_TIMEOUT,
-                 HOLOGRAM_VELOCITY_Y, HOLOGRAM_GRAVITY -> ValueType.DECIMAL;
-            case HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL -> ValueType.TEXT;
-            default -> ValueType.COLOR;
+            case ENABLE_DAMAGE_INDICATOR, ENABLE_HEALTH_BAR, ENABLE_HOLOGRAM_HEALTH_BAR, ENABLE_HOLOGRAPHIC_CUSTOM_NAMES, HEALTH_BAR_ALWAYS_VISIBLE, ENABLE_DAMAGE_MERGE -> BOOLEAN;
+            case HEALTH_BAR_DISPLAY_DURATION, HEALTH_BAR_LENGTH, HOLOGRAM_FOLLOW_SPEED, DAMAGE_MERGE_JUMP_DURATION -> INTEGER;
+            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION, DAMAGE_MERGE_TIMEOUT, HOLOGRAM_VELOCITY_Y, HOLOGRAM_GRAVITY -> DECIMAL;
+            case HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL -> TEXT;
+            default -> COLOR;
         };
     }
 
     double minimum() {
         return switch (this) {
-            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION -> -64;
-            case HOLOGRAM_VELOCITY_Y -> -10;
-            case DAMAGE_MERGE_TIMEOUT, HOLOGRAM_GRAVITY -> 0;
-            default -> 1;
+            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION -> -MAXIMUM_HOLOGRAM_OFFSET;
+            case HOLOGRAM_VELOCITY_Y -> -MAXIMUM_HOLOGRAM_VELOCITY;
+            case DAMAGE_MERGE_TIMEOUT, HOLOGRAM_GRAVITY -> MINIMUM_NONNEGATIVE_SETTING;
+            default -> MINIMUM_POSITIVE_SETTING;
         };
     }
 
     double maximum() {
         return switch (this) {
-            case HEALTH_BAR_DISPLAY_DURATION, HOLOGRAM_VELOCITY_Y, HOLOGRAM_GRAVITY -> 10;
-            case HEALTH_BAR_LENGTH -> 100;
-            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION -> 64;
-            case DAMAGE_MERGE_TIMEOUT -> 60;
-            default -> 200;
+            case HEALTH_BAR_DISPLAY_DURATION -> MAXIMUM_HEALTH_BAR_DISPLAY_SECONDS;
+            case HOLOGRAM_VELOCITY_Y -> MAXIMUM_HOLOGRAM_VELOCITY;
+            case HOLOGRAM_GRAVITY -> MAXIMUM_HOLOGRAM_GRAVITY;
+            case HEALTH_BAR_LENGTH -> MAXIMUM_HEALTH_BAR_LENGTH;
+            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION -> MAXIMUM_HOLOGRAM_OFFSET;
+            case DAMAGE_MERGE_TIMEOUT -> MAXIMUM_DAMAGE_MERGE_TIMEOUT_SECONDS;
+            default -> MAXIMUM_ANIMATION_TICKS;
         };
     }
 
     int maximumTextLength() {
         return switch (this) {
-            case HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL -> 32;
-            case HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX -> 256;
-            default -> 64;
+            case HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL -> MAXIMUM_SYMBOL_TEXT_LENGTH;
+            case HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX -> MAXIMUM_AFFIX_TEXT_LENGTH;
+            default -> MAXIMUM_SCALAR_TEXT_LENGTH;
         };
     }
 
     enum ValueType {
-        BOOLEAN, INTEGER, DECIMAL, COLOR, TEXT
+        BOOLEAN,
+        INTEGER,
+        DECIMAL,
+        COLOR,
+        TEXT
     }
 }

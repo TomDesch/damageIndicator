@@ -1,5 +1,6 @@
 package io.github.stealingdapenta.damageindicator.config;
 
+import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.*;
 import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import java.util.EnumMap;
@@ -17,9 +18,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 final class RuntimeConfiguration {
 
     private static final Pattern RGB = Pattern.compile("&\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*\\)");
+    private static final int MAXIMUM_RGB_CHANNEL_VALUE = 255;
     private static final int MAX_SERIALIZED_HEALTH_BAR_LENGTH = 256;
-    private static final List<ConfigKeys> HEALTH_BAR_APPEARANCE = List.of(ConfigKeys.HEALTH_BAR_PREFIX,
-            ConfigKeys.HEALTH_BAR_SUFFIX, ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL, ConfigKeys.HEALTH_BAR_DEAD_SYMBOL);
+    private static final List<ConfigKeys> HEALTH_BAR_APPEARANCE = List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX,
+            HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL);
     private final JavaPlugin plugin;
     private final FileConfiguration source;
     private final Map<ConfigKeys, Value> values;
@@ -76,17 +78,19 @@ final class RuntimeConfiguration {
     }
 
     private static void validateHealthBarOutput(JavaPlugin plugin, Map<ConfigKeys, Value> values) {
-        int length = values.get(ConfigKeys.HEALTH_BAR_LENGTH).integer();
-        TextComponent prefix = values.get(ConfigKeys.HEALTH_BAR_PREFIX).formatted();
-        TextComponent suffix = values.get(ConfigKeys.HEALTH_BAR_SUFFIX).formatted();
-        TextComponent alive = values.get(ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL).formatted();
-        TextComponent dead = values.get(ConfigKeys.HEALTH_BAR_DEAD_SYMBOL).formatted();
+        int length = values.get(HEALTH_BAR_LENGTH).integer();
+        TextComponent prefix = values.get(HEALTH_BAR_PREFIX).formatted();
+        TextComponent suffix = values.get(HEALTH_BAR_SUFFIX).formatted();
+        TextComponent alive = values.get(HEALTH_BAR_ALIVE_SYMBOL).formatted();
+        TextComponent dead = values.get(HEALTH_BAR_DEAD_SYMBOL).formatted();
+        // Intermediate states can add style resets that neither all-alive nor all-dead output needs.
         for (int aliveCount = 0; aliveCount <= length; aliveCount++) {
             TextComponent bar = prefix.append(TEXT_UTIL.repeatTextWithStyles(alive, aliveCount))
                     .append(TEXT_UTIL.repeatTextWithStyles(dead, length - aliveCount))
                     .append(suffix);
             if (TEXT_UTIL.serializeComponent(bar).length() > MAX_SERIALIZED_HEALTH_BAR_LENGTH) {
-                plugin.getLogger().warning("Configured health bar exceeds Spigot's 256 UTF-16 character serialized name limit"
+                plugin.getLogger().warning("Configured health bar exceeds Spigot's " + MAX_SERIALIZED_HEALTH_BAR_LENGTH
+                        + " UTF-16 character serialized name limit"
                         + " with " + aliveCount + " alive symbols out of " + length
                         + ". Using default health_bar_prefix, health_bar_suffix, health_bar_alive_symbol and health_bar_dead_symbol;"
                         + " retaining health_bar_length=" + length + ".");
@@ -99,7 +103,8 @@ final class RuntimeConfiguration {
     }
 
     private static Object configuredValue(FileConfiguration config, ConfigKeys key) {
-        // contains(path, true) ignores Bukkit defaults, even when copyDefaults is enabled.
+        // Explicit canonical keys win over legacy aliases, including invalid or empty values.
+        // contains(path, true) excludes inherited Bukkit defaults even with copyDefaults enabled.
         if (config.contains(key.getConfigKey(), true)) {
             return config.get(key.getConfigKey(), null);
         }
@@ -108,8 +113,7 @@ final class RuntimeConfiguration {
                 return config.get(legacy, null);
             }
         }
-        // Supports standalone FileConfiguration implementations without explicit-key metadata.
-        // A real YAML configuration must always use our authoritative defaults instead.
+        // Preserve standalone implementations that expose strings but no explicit-key metadata.
         if (config.getDefaults() == null) {
             return config.getString(key.getConfigKey());
         }
@@ -118,50 +122,60 @@ final class RuntimeConfiguration {
 
     private static Value parse(ConfigKeys key, Object raw) {
         return switch (key.valueType()) {
-            case BOOLEAN -> {
-                if (!(raw instanceof Boolean) && !(raw instanceof String)) {
-                    throw new IllegalArgumentException("must be a boolean (true or false)");
-                }
-                String text = scalar(key, raw).trim();
-                if (!text.equalsIgnoreCase("true") && !text.equalsIgnoreCase("false")) {
-                    throw new IllegalArgumentException("must be a boolean (true or false)");
-                }
-                boolean value = Boolean.parseBoolean(text);
-                yield new Value(Boolean.toString(value), value, 0, 0, null, null);
-            }
-            case INTEGER -> {
-                String text = numericText(key, raw);
-                int value;
-                try {
-                    value = Integer.parseInt(text);
-                } catch (NumberFormatException exception) {
-                    throw new IllegalArgumentException("must be a whole number between " + key.minimum() + " and " + key.maximum());
-                }
-                checkRange(key, value);
-                yield new Value(Integer.toString(value), false, value, value, null, null);
-            }
-            case DECIMAL -> {
-                String text = numericText(key, raw);
-                double value;
-                try {
-                    value = Double.parseDouble(text);
-                } catch (NumberFormatException exception) {
-                    throw new IllegalArgumentException("must be a finite number between " + key.minimum() + " and " + key.maximum());
-                }
-                checkRange(key, value);
-                yield new Value(Double.toString(value), false, 0, value, null, null);
-            }
-            case COLOR -> {
-                String text = text(key, raw);
-                validateColor(text);
-                yield new Value(text, false, 0, 0, TEXT_UTIL.parseRGB(text), null);
-            }
-            case TEXT -> {
-                String text = text(key, raw);
-                validateFormattedColors(text);
-                yield new Value(text, false, 0, 0, null, TEXT_UTIL.parseFormattedString(text));
-            }
+            case BOOLEAN -> parseBoolean(key, raw);
+            case INTEGER -> parseInteger(key, raw);
+            case DECIMAL -> parseDecimal(key, raw);
+            case COLOR -> parseColor(key, raw);
+            case TEXT -> parseFormattedText(key, raw);
         };
+    }
+
+    private static Value parseBoolean(ConfigKeys key, Object raw) {
+        if (!(raw instanceof Boolean) && !(raw instanceof String)) {
+            throw new IllegalArgumentException("must be a boolean (true or false)");
+        }
+        String text = scalar(key, raw).trim();
+        if (!text.equalsIgnoreCase("true") && !text.equalsIgnoreCase("false")) {
+            throw new IllegalArgumentException("must be a boolean (true or false)");
+        }
+        boolean value = Boolean.parseBoolean(text);
+        return new Value(Boolean.toString(value), value, 0, 0, null, null);
+    }
+
+    private static Value parseInteger(ConfigKeys key, Object raw) {
+        String text = numericText(key, raw);
+        int value;
+        try {
+            value = Integer.parseInt(text);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("must be a whole number between " + key.minimum() + " and " + key.maximum());
+        }
+        checkRange(key, value);
+        return new Value(Integer.toString(value), false, value, value, null, null);
+    }
+
+    private static Value parseDecimal(ConfigKeys key, Object raw) {
+        String text = numericText(key, raw);
+        double value;
+        try {
+            value = Double.parseDouble(text);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("must be a finite number between " + key.minimum() + " and " + key.maximum());
+        }
+        checkRange(key, value);
+        return new Value(Double.toString(value), false, 0, value, null, null);
+    }
+
+    private static Value parseColor(ConfigKeys key, Object raw) {
+        String text = text(key, raw);
+        validateColor(text);
+        return new Value(text, false, 0, 0, TEXT_UTIL.parseRGB(text), null);
+    }
+
+    private static Value parseFormattedText(ConfigKeys key, Object raw) {
+        String text = text(key, raw);
+        validateFormattedColors(text);
+        return new Value(text, false, 0, 0, null, TEXT_UTIL.parseFormattedString(text));
     }
 
     private static String numericText(ConfigKeys key, Object raw) {
@@ -197,9 +211,9 @@ final class RuntimeConfiguration {
         if (!matcher.matches()) {
             throw new IllegalArgumentException("must use &(R,G,B), with each channel between 0 and 255");
         }
-        for (int channel = 1; channel <= 3; channel++) {
-            if (Integer.parseInt(matcher.group(channel)) > 255) {
-                throw new IllegalArgumentException("RGB channels must be between 0 and 255");
+        for (int channel = 1; channel <= matcher.groupCount(); channel++) {
+            if (Integer.parseInt(matcher.group(channel)) > MAXIMUM_RGB_CHANNEL_VALUE) {
+                throw new IllegalArgumentException("RGB channels must be between 0 and " + MAXIMUM_RGB_CHANNEL_VALUE);
             }
         }
     }

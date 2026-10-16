@@ -2,7 +2,7 @@ package io.github.stealingdapenta.damageindicator.config;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.*;
 import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
-import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
+import static io.github.stealingdapenta.damageindicator.config.ConfigurationTestSupport.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -178,7 +177,7 @@ class ConfigurationFileManagerTest {
         CONFIGURATION_FILE_MANAGER.reloadConfig();
 
         assertEquals(45, HOLOGRAM_FOLLOW_SPEED.asInt());
-        for (int tick = 0; tick < 200; tick++) {
+        for (int tick = 0; tick < REPEATED_ACCESS_COUNT; tick++) {
             MAGIC.getTextColor();
         }
         verify(logger, times(2)).warning(anyString());
@@ -328,15 +327,17 @@ class ConfigurationFileManagerTest {
                 + "health_bar_alive_symbol: '&(1,2,3)A&(4,5,6)B'\nhealth_bar_dead_symbol: 'D'\n";
         write(input);
         CONFIGURATION_FILE_MANAGER.loadConfig();
-        List<String> enabledBars = IntStream.rangeClosed(0, 100).mapToObj(this::serializedBar).toList();
+        List<String> enabledBars = IntStream.rangeClosed(0, 100)
+                .mapToObj(ConfigurationTestSupport::serializedBar).toList();
         assertEquals(100, HEALTH_BAR_LENGTH.asInt());
-        assertTrue(enabledBars.stream().allMatch(bar -> bar.length() <= 256));
+        assertTrue(enabledBars.stream().allMatch(bar -> bar.length() <= SERIALIZED_HEALTH_BAR_LIMIT));
         verify(logger).warning(contains("256 UTF-16"));
         write(input);
 
         CONFIGURATION_FILE_MANAGER.reloadConfig();
 
-        assertEquals(enabledBars, IntStream.rangeClosed(0, 100).mapToObj(this::serializedBar).toList());
+        assertEquals(enabledBars, IntStream.rangeClosed(0, 100)
+                .mapToObj(ConfigurationTestSupport::serializedBar).toList());
         assertEquals(100, HEALTH_BAR_LENGTH.asInt());
         assertEquals("&(1,2,3)A&(4,5,6)B", config.getString("health_bar_alive_symbol"));
         assertEquals(HEALTH_BAR_PREFIX.getDefaultValue(), HEALTH_BAR_PREFIX.asString());
@@ -344,22 +345,8 @@ class ConfigurationFileManagerTest {
         verifyNoMoreInteractions(logger);
     }
 
-    private String serializedBar(int alive) {
-        return TEXT_UTIL.serializeComponent(HEALTH_BAR_PREFIX.asFormattedString()
-                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive))
-                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), HEALTH_BAR_LENGTH.asInt() - alive))
-                .append(HEALTH_BAR_SUFFIX.asFormattedString()));
-    }
-
     private void write(String text) throws IOException {
         Files.writeString(file, text, StandardCharsets.UTF_8);
     }
 
-    private Map<ConfigKeys, String> strings() {
-        Map<ConfigKeys, String> values = new EnumMap<>(ConfigKeys.class);
-        for (ConfigKeys key : ConfigKeys.values()) {
-            values.put(key, key.asString());
-        }
-        return values;
-    }
 }

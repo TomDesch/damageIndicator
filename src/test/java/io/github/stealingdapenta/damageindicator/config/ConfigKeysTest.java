@@ -2,7 +2,7 @@ package io.github.stealingdapenta.damageindicator.config;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.*;
 import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
-import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
+import static io.github.stealingdapenta.damageindicator.config.ConfigurationTestSupport.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -190,7 +190,7 @@ class ConfigKeysTest {
 
     @Test
     void emptyFormattedTextAndLiteralAmpersandsAreValid() {
-        for (ConfigKeys key : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
+        for (ConfigKeys key : HEALTH_BAR_APPEARANCE) {
             freshConfig();
             config.set(key.getConfigKey(), "");
             loadPreloaded();
@@ -206,19 +206,21 @@ class ConfigKeysTest {
 
     @Test
     void individualTextLimitsAreEnforcedWhenCombinedOutputFits() {
-        for (ConfigKeys key : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
-            int limit = key == HEALTH_BAR_PREFIX || key == HEALTH_BAR_SUFFIX ? 256 : 32;
+        Map<ConfigKeys, Integer> limits = Map.of(HEALTH_BAR_PREFIX, 256, HEALTH_BAR_SUFFIX, 256,
+                HEALTH_BAR_ALIVE_SYMBOL, 32, HEALTH_BAR_DEAD_SYMBOL, 32);
+        for (var entry : limits.entrySet()) {
+            ConfigKeys key = entry.getKey();
+            int limit = entry.getValue();
             freshConfig();
-            for (ConfigKeys appearance : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
+            for (ConfigKeys appearance : HEALTH_BAR_APPEARANCE) {
                 config.set(appearance.getConfigKey(), "");
             }
             config.set(key.getConfigKey(), "x".repeat(limit));
-            int length = limit == 256 ? 100 : 1;
-            config.set("health_bar_length", length);
+            config.set("health_bar_length", 1);
             loadPreloaded();
             assertEquals(limit, key.asFormattedString().content().length());
             assertSame(key.asFormattedString(), key.asFormattedString());
-            assertEquals(length, HEALTH_BAR_LENGTH.asInt());
+            assertEquals(1, HEALTH_BAR_LENGTH.asInt());
             verifyNoInteractions(logger);
             invalid(key, "x".repeat(limit + 1));
             assertEquals(key.getDefaultValue(), key.asString());
@@ -259,8 +261,9 @@ class ConfigKeysTest {
 
         assertDefaultAppearanceAndBoundedOutput(100);
         clearInvocations(tracked);
-        for (int tick = 0; tick < 200; tick++) {
-            assertTrue(serializedBar(tick % 101).length() <= 256);
+        for (int tick = 0; tick < REPEATED_ACCESS_COUNT; tick++) {
+            int alive = tick % (HEALTH_BAR_LENGTH.asInt() + 1);
+            assertTrue(serializedBar(alive).length() <= SERIALIZED_HEALTH_BAR_LIMIT);
         }
         verifyNoInteractions(tracked);
         verify(logger).warning(contains("256 UTF-16"));
@@ -275,8 +278,9 @@ class ConfigKeysTest {
         config.set("health_bar_alive_symbol", "&bA");
         config.set("health_bar_dead_symbol", "D");
         assertEquals(254, serializedBar(0).length());
-        assertEquals(256, serializedBar(20).length());
-        assertTrue(serializedBar(10).length() > 256, "The bold-to-plain reset adds serialized characters");
+        assertEquals(SERIALIZED_HEALTH_BAR_LIMIT, serializedBar(20).length());
+        assertTrue(serializedBar(10).length() > SERIALIZED_HEALTH_BAR_LIMIT,
+                "The bold-to-plain reset adds serialized characters");
 
         loadPreloaded();
 
@@ -292,18 +296,21 @@ class ConfigKeysTest {
         loadPreloaded();
         assertDefaultAppearanceAndBoundedOutput(100);
         clearInvocations(logger);
-        config.set("health_bar_length", 16);
-        config.set("health_bar_prefix", "P".repeat(236));
-        config.set("health_bar_suffix", "TAIL");
+        int length = 16;
+        String suffix = "TAIL";
+        String prefix = "P".repeat(SERIALIZED_HEALTH_BAR_LIMIT - length - suffix.length());
+        config.set("health_bar_length", length);
+        config.set("health_bar_prefix", prefix);
+        config.set("health_bar_suffix", suffix);
         config.set("health_bar_alive_symbol", "A");
         config.set("health_bar_dead_symbol", "D");
 
         loadPreloaded();
 
-        assertEquals("P".repeat(236), HEALTH_BAR_PREFIX.asString());
-        assertEquals("TAIL", HEALTH_BAR_SUFFIX.asString());
-        for (int alive = 0; alive <= 16; alive++) {
-            assertEquals(256, serializedBar(alive).length());
+        assertEquals(prefix, HEALTH_BAR_PREFIX.asString());
+        assertEquals(suffix, HEALTH_BAR_SUFFIX.asString());
+        for (int alive = 0; alive <= length; alive++) {
+            assertEquals(SERIALIZED_HEALTH_BAR_LIMIT, serializedBar(alive).length());
         }
         verifyNoInteractions(logger);
     }
@@ -315,7 +322,7 @@ class ConfigKeysTest {
         config.set("health_bar_prefix", "&(1,2) broken");
         loadPreloaded();
         verify(logger, times(3)).warning(anyString());
-        for (int tick = 0; tick < 200; tick++) {
+        for (int tick = 0; tick < REPEATED_ACCESS_COUNT; tick++) {
             MAGIC.getTextColor();
             POISON.getTextColor();
             HEALTH_BAR_PREFIX.asFormattedString();
@@ -329,7 +336,7 @@ class ConfigKeysTest {
         when(plugin.getConfig()).thenReturn(tracked);
         loadPreloaded();
         clearInvocations(tracked, logger);
-        for (int tick = 0; tick < 200; tick++) {
+        for (int tick = 0; tick < REPEATED_ACCESS_COUNT; tick++) {
             assertTrue(ENABLE_DAMAGE_INDICATOR.asBoolean());
             assertEquals(16, HEALTH_BAR_LENGTH.asIntBetween(1, 100));
             assertEquals(20, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(1));
@@ -345,7 +352,7 @@ class ConfigKeysTest {
     @Test
     void extraAccessorConstraintsFallbackAndWarnOnceForCurrentSnapshot() {
         loadPreloaded();
-        for (int tick = 0; tick < 200; tick++) {
+        for (int tick = 0; tick < REPEATED_ACCESS_COUNT; tick++) {
             assertEquals(30, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(30));
             assertEquals(10, HEALTH_BAR_LENGTH.asIntBetween(1, 10));
             assertEquals(2, DAMAGE_MERGE_TIMEOUT.asDoubleAtLeast(2));
@@ -374,12 +381,12 @@ class ConfigKeysTest {
     @Test
     void standaloneMockPluginStillReadsItsOwnConfiguration() {
         loadPreloaded();
-        var mockedConfig = mock(YamlConfiguration.class);
-        when(mockedConfig.getString("enable_hologram_health_bar")).thenReturn("true");
-        when(plugin.getConfig()).thenReturn(mockedConfig);
+        freshConfig();
+        config.set("enable_hologram_health_bar", "true");
         assertTrue(ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean());
-        when(mockedConfig.getString("enable_hologram_health_bar")).thenReturn("false");
+        config.set("enable_hologram_health_bar", "false");
         assertFalse(ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean());
+        verifyNoInteractions(logger);
     }
 
     @Test
@@ -411,33 +418,17 @@ class ConfigKeysTest {
         verifyNoMoreInteractions(logger);
     }
 
-    private Map<ConfigKeys, String> strings() {
-        Map<ConfigKeys, String> values = new EnumMap<>(ConfigKeys.class);
-        for (ConfigKeys key : ConfigKeys.values()) {
-            values.put(key, key.asString());
-        }
-        return values;
-    }
-
     private void loadPreloaded() {
         CONFIGURATION_FILE_MANAGER.loadConfig(plugin, plugin.getConfig());
     }
 
     private void assertDefaultAppearanceAndBoundedOutput(int length) {
         assertEquals(length, HEALTH_BAR_LENGTH.asInt());
-        for (ConfigKeys key : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
+        for (ConfigKeys key : HEALTH_BAR_APPEARANCE) {
             assertEquals(key.getDefaultValue(), key.asString(), key.toString());
         }
         for (int alive = 0; alive <= length; alive++) {
-            assertTrue(serializedBar(alive).length() <= 256, "Alive count " + alive);
+            assertTrue(serializedBar(alive).length() <= SERIALIZED_HEALTH_BAR_LIMIT, "Alive count " + alive);
         }
-    }
-
-    private String serializedBar(int alive) {
-        int length = HEALTH_BAR_LENGTH.asInt();
-        return TEXT_UTIL.serializeComponent(HEALTH_BAR_PREFIX.asFormattedString()
-                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive))
-                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), length - alive))
-                .append(HEALTH_BAR_SUFFIX.asFormattedString()));
     }
 }
