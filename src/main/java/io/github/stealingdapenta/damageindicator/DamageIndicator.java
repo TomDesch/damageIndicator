@@ -73,6 +73,7 @@ public class DamageIndicator extends JavaPlugin {
         customNamesListener.shutdown();
         healthBarListener.shutdown();
         damageIndicatorListener.shutdown();
+        HOLOGRAPH_UTIL.clearTracking();
         logFeatureStates();
         healthBarListener.refreshPersistedHolograms();
         customNamesListener.refreshLoadedEntities();

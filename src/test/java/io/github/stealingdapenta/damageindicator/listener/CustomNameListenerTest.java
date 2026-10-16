@@ -39,6 +39,7 @@ import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
@@ -190,6 +191,19 @@ class CustomNameListenerTest {
         assertTrue(mob.visible.get());
         assertFalse(mob.data.containsKey("custom-name-hidden"));
         assertEquals(0, stands.size());
+    }
+
+    @Test
+    void worldUnloadRestoresVisibilityBeforeEntitiesBecomeUnavailable() {
+        MobState mob = mob("Original", true);
+        listener.refreshLoadedEntities();
+        listener.onWorldUnload(new WorldUnloadEvent(world));
+        assertTrue(mob.visible.get());
+        assertFalse(mob.data.containsKey("custom-name-hidden"));
+        assertFalse(stands.getFirst().valid.get());
+        loaded.clear();
+        advance(40);
+        assertTrue(tasks.stream().allMatch(task -> task.cancelled.get()));
     }
 
     @Test

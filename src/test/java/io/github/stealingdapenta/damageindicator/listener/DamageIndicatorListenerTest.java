@@ -41,6 +41,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
@@ -238,6 +239,45 @@ class DamageIndicatorListenerTest {
         assertTrue(stands.stream().noneMatch(stand -> stand.valid.get()));
         assertTrue(cancelled.get());
         verify(scheduler).runTaskTimer(any(Plugin.class), any(Runnable.class), eq(1L), eq(1L));
+    }
+
+    @Test
+    void dispenserProjectileHitRemovalReleasesTheNumberInsteadOfDeletingIt() {
+        Projectile arrow = mock(Projectile.class);
+        var dispenser = mock(org.bukkit.projectiles.BlockProjectileSource.class);
+        when(arrow.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(arrow.getShooter()).thenReturn(dispenser);
+        listener.displayDamage(victim(), arrow, 2, EntityDamageEvent.DamageCause.PROJECTILE);
+
+        listener.onEntityRemove(new EntityRemoveEvent(arrow, EntityRemoveEvent.Cause.HIT));
+
+        assertTrue(stands.getFirst().valid.get());
+        advance(14);
+        assertTrue(stands.getFirst().valid.get());
+        advance(1);
+        assertFalse(stands.getFirst().valid.get());
+    }
+
+    @Test
+    void explodingAttackerRemovalDoesNotEraseCompletedNonlethalDamage() {
+        Entity creeper = mock(org.bukkit.entity.Creeper.class);
+        when(creeper.getUniqueId()).thenReturn(UUID.randomUUID());
+        hit(victim(), creeper, 2);
+        listener.onEntityRemove(new EntityRemoveEvent(creeper, EntityRemoveEvent.Cause.EXPLODE));
+        assertTrue(stands.getFirst().valid.get());
+        advance(15);
+        assertFalse(stands.getFirst().valid.get());
+    }
+
+    @Test
+    void worldUnloadCleansAllNumbersWhileEntitiesAreStillAccessible() {
+        hit(victim(), attacker(), 2);
+        hit(victim(), null, 1);
+        listener.onWorldUnload(new WorldUnloadEvent(world));
+        assertTrue(stands.stream().noneMatch(stand -> stand.valid.get()));
+        loaded.clear();
+        advance(1);
+        assertTrue(cancelled.get());
     }
 
     @Test

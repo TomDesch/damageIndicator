@@ -50,6 +50,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitScheduler;
@@ -72,6 +73,7 @@ class HealthBarListenerTest {
     private HealthBarListener listener;
     private World world;
     private Logger logger;
+    private boolean cancelSpawns;
 
     @BeforeAll
     static void initializeRegistries() {
@@ -111,6 +113,10 @@ class HealthBarListenerTest {
             Model stand = new Model(ArmorStand.class, null);
             stands.add(stand);
             ((Consumer<ArmorStand>) call.getArgument(2)).accept((ArmorStand) stand.entity);
+            if (cancelSpawns) {
+                stand.valid = false;
+                loaded.remove(stand.id);
+            }
             return stand.entity;
         });
         config.set("enable_health_bar", true);
@@ -139,6 +145,97 @@ class HealthBarListenerTest {
         assertSame(DamageType.GENERIC, Registry.DAMAGE_TYPE.getOrThrow(NamespacedKey.minecraft("generic")));
         assertEquals(NamespacedKey.minecraft("generic"), DamageType.GENERIC.getKeyOrThrow());
         assertTrue(DamageType.GENERIC.isRegistered());
+    }
+
+    @Test
+    void cancelledHologramSpawnDoesNotRetryOrRetainCleanupHandlers() throws Exception {
+        holograms();
+        alwaysVisible();
+        cancelSpawns = true;
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(40);
+
+        assertEquals(1, stands.size());
+        assertTrue(scheduled.getFirst().cancelled.get());
+        assertEquals("Original", mob.name);
+        assertEquals(0, registeredCleanupCount());
+        damage(mob, 1);
+        advance(40);
+        assertEquals(2, stands.size());
+        assertEquals(0, registeredCleanupCount());
+        listener.clearDisplay(mob.entity, true);
+        listener.shutdown();
+        assertEquals(0, registeredCleanupCount());
+        verify(logger).warning(org.mockito.ArgumentMatchers.contains("spawn was cancelled"));
+    }
+
+    @Test
+    void worldUnloadRestoresNamesBeforeSaveAndReleasesHolographicOwnership() throws Exception {
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        listener.onWorldUnload(new WorldUnloadEvent(world));
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+        assertTrue(mob.data.containsKey(key("health-bar-activated")));
+
+        holograms();
+        listener.refreshPersistedHolograms();
+        assertEquals(1, stands.size());
+        listener.onWorldUnload(new WorldUnloadEvent(world));
+        loaded.clear();
+        advance(1);
+        assertFalse(stands.getFirst().valid);
+        assertEquals(0, registeredCleanupCount());
+        assertTrue(scheduled.getLast().cancelled.get());
+    }
+
+    @Test
+    void unavailableWorldWrappersStillReleaseHologramUuidsAndCallbacks() throws Exception {
+        holograms();
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        assertEquals(1, registeredCleanupCount());
+        loaded.clear();
+
+        advance(1);
+
+        assertEquals(0, registeredCleanupCount());
+        assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stands.getFirst().entity));
+        assertTrue(scheduled.getLast().cancelled.get());
+    }
+
+    @Test
+    void legacyInlineActivationSurvivesMigrationAndRestartWithoutCapturingTheOldBar() {
+        alwaysVisible();
+        Model mob = mob("Old health bar");
+        mob.visible = true;
+        mob.data.put(key("health-name-overridden"), true);
+        mob.data.put(key("health-original-name"), "Saved name");
+        mob.data.put(key("health-original-visible"), false);
+        listener.restorePersistedNames();
+        assertEquals("Saved name", mob.name);
+        listener.refreshPersistedHolograms();
+        assertEquals("AAAAAAAAAA", mob.name);
+        listener.shutdown();
+        assertEquals("Saved name", mob.name);
+        HealthBarListener restarted = new HealthBarListener();
+        restarted.restorePersistedNames();
+        restarted.refreshPersistedHolograms();
+        assertEquals("AAAAAAAAAA", mob.name);
+        restarted.shutdown();
+        assertEquals("Saved name", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    private int registeredCleanupCount() throws Exception {
+        var field = HolographUtil.class.getDeclaredField("cleanupHandlers");
+        field.setAccessible(true);
+        return ((Map<?, ?>) field.get(HolographUtil.HOLOGRAPH_UTIL)).size();
     }
 
     @Test

@@ -22,6 +22,7 @@ public enum HolographUtil {
     private final Set<UUID> activeHolograms = new HashSet<>();
     private final Map<UUID, Runnable> cleanupHandlers = new HashMap<>();
     private final Set<UUID> removing = new HashSet<>();
+    private boolean spawnFailureReported;
 
     /**
      * Creates an invisible, non-colliding ArmorStand with the given name at the specified location.
@@ -46,6 +47,11 @@ public enum HolographUtil {
                                      .set(DamageIndicatorListener.getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
                        });
         track(hologram);
+        if (!hologram.isValid() && !spawnFailureReported) {
+            spawnFailureReported = true;
+            io.github.stealingdapenta.damageindicator.DamageIndicator.getInstance().getLogger()
+                    .warning("Hologram spawn was cancelled or produced an invalid entity; displays cannot be created here.");
+        }
         return hologram;
     }
 
@@ -60,11 +66,18 @@ public enum HolographUtil {
     }
 
     public void forget(Entity entity) {
-        activeHolograms.remove(entity.getUniqueId());
-        cleanupHandlers.remove(entity.getUniqueId());
+        forget(entity.getUniqueId());
+    }
+
+    public void forget(UUID id) {
+        activeHolograms.remove(id);
+        cleanupHandlers.remove(id);
     }
 
     public void onCleanup(ArmorStand hologram, Runnable cleanup) {
+        if (!hologram.isValid()) {
+            throw new IllegalArgumentException("Cannot register cleanup for an invalid hologram");
+        }
         cleanupHandlers.put(hologram.getUniqueId(), cleanup);
     }
 
@@ -101,6 +114,7 @@ public enum HolographUtil {
         activeHolograms.clear();
         cleanupHandlers.clear();
         removing.clear();
+        spawnFailureReported = false;
     }
 
     public boolean teleportIfMoved(ArmorStand hologram, Location target) {

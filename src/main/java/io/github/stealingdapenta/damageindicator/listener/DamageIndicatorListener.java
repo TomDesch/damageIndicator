@@ -34,6 +34,7 @@ import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
@@ -124,9 +125,6 @@ public class DamageIndicatorListener implements Listener {
 
     private ArmorStand createArmorStand(Location location, double damage, TextColor color) {
         ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(location, Component.text(formatNumber(damage), color));
-        if (!stand.isValid()) {
-            DamageIndicator.getInstance().getLogger().warning("Could not create damage hologram at " + location + ".");
-        }
         return stand;
     }
 
@@ -239,6 +237,13 @@ public class DamageIndicatorListener implements Listener {
         removeForEntities(ids);
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        Set<UUID> ids = new HashSet<>();
+        event.getWorld().getEntities().forEach(entity -> ids.add(entity.getUniqueId()));
+        removeForEntities(ids);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityRemove(EntityRemoveEvent event) {
         Entity entity = event.getEntity();
@@ -256,8 +261,11 @@ public class DamageIndicatorListener implements Listener {
 
     private void removeForEntities(Set<UUID> ids) {
         for (AttackerVictimPair pair : new ArrayList<>(mergedDamage.keySet())) {
-            if (pair.involvesAny(ids) || ids.contains(mergedDamage.get(pair).stand.getUniqueId())) {
+            MergedDisplay display = mergedDamage.get(pair);
+            if (ids.contains(display.victimId) || ids.contains(display.stand.getUniqueId())) {
                 removeMerged(pair);
+            } else if (pair.involvesAny(ids)) {
+                release(pair);
             }
         }
         for (UUID id : new ArrayList<>(animations.keySet())) {

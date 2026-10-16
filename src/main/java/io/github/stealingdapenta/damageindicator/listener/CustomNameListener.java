@@ -30,6 +30,7 @@ import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -64,6 +65,11 @@ public class CustomNameListener implements Listener {
     public void onEntitiesUnload(EntitiesUnloadEvent event) {
         event.getEntities().stream().filter(LivingEntity.class::isInstance)
                 .map(LivingEntity.class::cast).forEach(this::clearDisplay);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        new ArrayList<>(event.getWorld().getLivingEntities()).forEach(this::clearDisplay);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -112,7 +118,7 @@ public class CustomNameListener implements Listener {
                 HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()),
                 TEXT_UTIL.deserializeComponent(name));
         if (!stand.isValid()) {
-            DamageIndicator.getInstance().getLogger().warning("Could not create custom-name hologram for " + id + ".");
+            candidates.remove(id);
             return;
         }
         entity.getPersistentDataContainer().set(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN, true);
@@ -199,7 +205,9 @@ public class CustomNameListener implements Listener {
             display.stand.setCustomName(name);
             display.name = name;
         }
-        entity.setCustomNameVisible(false);
+        if (entity.isCustomNameVisible()) {
+            entity.setCustomNameVisible(false);
+        }
         return true;
     }
 
@@ -221,6 +229,9 @@ public class CustomNameListener implements Listener {
         candidates.remove(entity.getUniqueId());
         removeDisplay(entity.getUniqueId());
         restoreCustomNameVisibility(entity);
+        if (candidates.isEmpty() && activeNames.isEmpty()) {
+            stopHeartbeat();
+        }
     }
 
     private boolean isEnabled() {

@@ -63,6 +63,32 @@ class HolographUtilTest {
     }
 
     @Test
+    void forgettingUnavailableWrapperByUuidAlsoReleasesItsCleanupCallback() {
+        ArmorStand stand = mock(ArmorStand.class);
+        UUID id = UUID.randomUUID();
+        when(stand.getUniqueId()).thenReturn(id);
+        when(stand.isValid()).thenReturn(true);
+        Runnable cleanup = mock(Runnable.class);
+        HOLOGRAPH_UTIL.track(stand);
+        HOLOGRAPH_UTIL.onCleanup(stand, cleanup);
+
+        HOLOGRAPH_UTIL.forget(id);
+        HOLOGRAPH_UTIL.cleanup(stand);
+
+        verify(cleanup, never()).run();
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
+    void invalidSpawnsCannotRegisterOwnerCallbacks() {
+        ArmorStand invalid = mock(ArmorStand.class);
+        Runnable cleanup = mock(Runnable.class);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> HOLOGRAPH_UTIL.onCleanup(invalid, cleanup));
+        verify(cleanup, never()).run();
+    }
+
+    @Test
     void administrativeCleanupDetachesTrackingBeforeRemovingTheEntity() {
         ArmorStand stand = mock(ArmorStand.class);
         when(stand.getUniqueId()).thenReturn(UUID.randomUUID());

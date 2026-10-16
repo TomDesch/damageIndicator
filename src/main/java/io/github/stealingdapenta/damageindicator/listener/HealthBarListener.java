@@ -44,6 +44,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
@@ -179,6 +180,10 @@ public class HealthBarListener implements Listener {
             Entity existing = bar.hologram == null ? null : Bukkit.getEntity(bar.hologram);
             if (!(existing instanceof ArmorStand stand) || !stand.isValid()) {
                 ArmorStand created = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
+                if (!created.isValid()) {
+                    clearDisplay(entity, false);
+                    return;
+                }
                 bar.hologram = created.getUniqueId();
                 UUID ownerId = entity.getUniqueId();
                 HOLOGRAPH_UTIL.onCleanup(created, () -> {
@@ -290,8 +295,12 @@ public class HealthBarListener implements Listener {
     private void removeHologram(ActiveBar bar) {
         UUID id = bar.hologram;
         bar.hologram = null;
-        if (id != null && Bukkit.getEntity(id) instanceof ArmorStand stand) {
-            HOLOGRAPH_UTIL.remove(stand);
+        if (id != null) {
+            if (Bukkit.getEntity(id) instanceof ArmorStand stand) {
+                HOLOGRAPH_UTIL.remove(stand);
+            } else {
+                HOLOGRAPH_UTIL.forget(id);
+            }
         }
     }
 
@@ -325,6 +334,12 @@ public class HealthBarListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        new ArrayList<>(event.getWorld().getLivingEntities())
+                .forEach(entity -> clearDisplay(entity, !ENABLE_HEALTH_BAR.asBoolean()));
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityRemove(EntityRemoveEvent event) {
         // Bukkit forbids modifying the removed entity; its persisted data is recovered on load.
@@ -355,6 +370,7 @@ public class HealthBarListener implements Listener {
             return;
         }
         PersistentDataContainer data = entity.getPersistentDataContainer();
+        migrateLegacyInlineActivation(data);
         if (Boolean.TRUE.equals(data.get(LEGACY_ACTIVATED, PersistentDataType.BOOLEAN))) {
             data.set(ACTIVATED, PersistentDataType.BOOLEAN, true);
             data.remove(LEGACY_ACTIVATED);
@@ -400,6 +416,7 @@ public class HealthBarListener implements Listener {
         Bukkit.getWorlds()
               .forEach(world -> world.getLivingEntities()
                                      .forEach(entity -> {
+                                         migrateLegacyInlineActivation(entity.getPersistentDataContainer());
                                          restoreOwnedName(entity);
                                          if (!ENABLE_HEALTH_BAR.asBoolean()) {
                                              entity.getPersistentDataContainer()
@@ -408,6 +425,12 @@ public class HealthBarListener implements Listener {
                                                    .remove(LEGACY_ACTIVATED);
                                          }
                                      }));
+    }
+
+    private void migrateLegacyInlineActivation(PersistentDataContainer data) {
+        if (hasLegacyOriginal(data) && ENABLE_HEALTH_BAR.asBoolean() && HEALTH_BAR_ALWAYS_VISIBLE.asBoolean()) {
+            data.set(ACTIVATED, PersistentDataType.BOOLEAN, true);
+        }
     }
 
     /**
