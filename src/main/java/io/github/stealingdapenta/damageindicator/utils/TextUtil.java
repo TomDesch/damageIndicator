@@ -30,7 +30,8 @@ public enum TextUtil {
     private static final Pattern TEXT_PATTERN = Pattern.compile(RGB_PATTERN.pattern() + "|" + DECORATOR_PATTERN.pattern());
 
     /**
-     * Parses a string with Adventure formatting codes into a TextComponent. Supports: color codes (&(r,g,b)) and decorator codes (&b, &i, &r, etc.)
+     * Parses a string with Adventure formatting codes into a TextComponent, preserving whitespace.
+     * Colors and decorations remain active until changed; &r resets the color to white and disables decorations.
      */
     public TextComponent parseFormattedString(String input) {
         String[] segments = splitByPatternWithDelimiters(input);
@@ -48,23 +49,14 @@ public enum TextUtil {
             } else if (isDecoratorPattern(segment)) {
                 String code = segment.substring(1);
                 if ("r".equals(code)) {
-                    // Flush current styled content (if any)
-                    if (!builder.content()
-                                .isEmpty()) {
-                        formatted.add(builder.build());
-                    }
                     builder = Component.text();
                     disableAllStyle(builder); // reset styles for next segment
                 } else {
                     builder.decorate(FORMAT_CODE_STYLES.get(code));
                 }
-            } else if (!segment.isBlank()) {
-                if (builder.content()
-                           .isEmpty()) {
-                    builder.content(segment);
-                    formatted.add(builder.build());
-                    builder = Component.text();
-                }
+            } else if (!segment.isEmpty()) {
+                formatted.add(builder.content(segment).build());
+                builder.content("");
             }
         }
 
@@ -82,7 +74,7 @@ public enum TextUtil {
     }
 
     /**
-     * Combines a list of components into a single one. Throws if empty.
+     * Combines components without letting the first component's style affect later components. Throws if empty.
      */
     public TextComponent combineTextComponents(List<TextComponent> textComponents) {
         if (textComponents.isEmpty()) {
@@ -90,6 +82,9 @@ public enum TextUtil {
         }
 
         TextComponent combined = textComponents.get(0);
+        if (textComponents.size() > 1 && !combined.style().isEmpty()) {
+            combined = Component.empty().append(combined);
+        }
         for (int i = 1; i < textComponents.size(); i++) {
             combined = combined.append(textComponents.get(i));
         }
@@ -128,17 +123,22 @@ public enum TextUtil {
     }
 
     /**
-     * Repeats a styled text component's content n times while preserving style.
+     * Repeats the entire component tree without changing its styles or children. Zero repetitions return an empty component.
      */
     public TextComponent repeatTextWithStyles(TextComponent textComponent, int times) {
         if (times < 0) {
-            throw new IllegalArgumentException("Number of repetitions should be greater than zero.");
+            throw new IllegalArgumentException("Number of repetitions should be zero or greater.");
         }
 
-        return textComponent.toBuilder()
-                            .content(textComponent.content()
-                                                  .repeat(times))
-                            .build();
+        if (times == 1) {
+            return textComponent;
+        }
+
+        TextComponent.Builder repeated = Component.text();
+        for (int i = 0; i < times; i++) {
+            repeated.append(textComponent);
+        }
+        return repeated.build();
     }
 
     public String serializeComponent(Component component) {
