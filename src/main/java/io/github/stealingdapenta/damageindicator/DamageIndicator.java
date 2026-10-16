@@ -1,6 +1,7 @@
 package io.github.stealingdapenta.damageindicator;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
+import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
 
 import io.github.stealingdapenta.damageindicator.command.AreaRemoveCommand;
 import io.github.stealingdapenta.damageindicator.command.AreaRenameCommand;
@@ -11,6 +12,7 @@ import io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListene
 import io.github.stealingdapenta.damageindicator.listener.HealthBarListener;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -19,6 +21,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class DamageIndicator extends JavaPlugin {
 
     private static DamageIndicator instance;
+    private boolean configured;
 
     private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();
     private final HealthBarListener healthBarListener = new HealthBarListener();
@@ -38,6 +41,7 @@ public class DamageIndicator extends JavaPlugin {
     public void displayVirtualDamage(org.bukkit.entity.LivingEntity victim, org.bukkit.entity.Entity attacker,
                                      double damage, org.bukkit.event.entity.EntityDamageEvent.DamageCause cause) {
         if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Damage indicators require the server thread");
+        if (!configured) throw new IllegalStateException("DamageIndicator is not enabled");
         damageIndicatorListener.displayDamage(victim, attacker, damage, cause);
     }
 
@@ -45,6 +49,7 @@ public class DamageIndicator extends JavaPlugin {
     public void onEnable() {
         instance = this;
         CONFIGURATION_FILE_MANAGER.loadConfig();
+        configured = true;
 
         registerCommand("reload", reloadConfigCommand);
         registerCommand("arearemove", areaRemoveCommand);
@@ -64,13 +69,18 @@ public class DamageIndicator extends JavaPlugin {
     }
 
     public void reloadConfiguration() {
+        CONFIGURATION_FILE_MANAGER.reloadConfig();
         customNamesListener.shutdown();
         healthBarListener.shutdown();
         damageIndicatorListener.shutdown();
-        CONFIGURATION_FILE_MANAGER.reloadConfig();
         logFeatureStates();
         healthBarListener.refreshPersistedHolograms();
         customNamesListener.refreshLoadedEntities();
+    }
+
+    public void clearNameDisplays(LivingEntity entity) {
+        healthBarListener.clearDisplay(entity, true);
+        customNamesListener.clearDisplay(entity);
     }
 
     private void logFeatureStates() {
@@ -99,9 +109,13 @@ public class DamageIndicator extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        customNamesListener.shutdown();
-        healthBarListener.shutdown();
-        damageIndicatorListener.shutdown();
+        if (configured) {
+            customNamesListener.shutdown();
+            healthBarListener.shutdown();
+            damageIndicatorListener.shutdown();
+            configured = false;
+        }
+        HOLOGRAPH_UTIL.clearTracking();
         instance = null;
         getLogger().info("Damage Indicator plugin disabled.");
     }

@@ -138,8 +138,8 @@ public enum ConfigKeys {
         return value().formatted();
     }
 
-    static void install(JavaPlugin plugin) {
-        runtime = RuntimeConfiguration.load(plugin, plugin.getConfig());
+    static void install(RuntimeConfiguration replacement) {
+        runtime = replacement;
     }
 
     private RuntimeConfiguration.Value value() {

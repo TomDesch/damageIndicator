@@ -19,6 +19,8 @@
 # Invalid entries remain in this file so you can correct them.
 # Explicit canonical keys win over legacy aliases, even if the canonical value is invalid.
 # Changes become active after /damageindicator:reload; load and reload use the same validation.
+# Unreadable files or YAML syntax errors abort loading without changing the active
+# configuration or overwriting this file. Fix the error, then reload again.
 
 enable_damage_indicator: true             # Shows animated floating numbers on entity damage.
 enable_health_bar: true                   # Displays health bars above mobs using their custom name.
@@ -33,7 +35,10 @@ health_bar_display_duration: 5            # Time in seconds the health bar stays
 health_bar_length: 16                     # Total symbols shown in the bar (whole number: 1–100).
 
 # Formatted prefixes/suffixes: at most 256 characters each; symbols: at most 32 each.
-# This also bounds repeated bar output. Empty text is allowed. Formatting: &(R,G,B)
+# Every complete bar must serialize to at most 256 UTF-16 characters (Spigot's name limit).
+# If any health state exceeds that limit, all four appearance settings use defaults;
+# your valid health_bar_length is retained. Validation runs only on load/reload.
+# Empty text is allowed. Formatting: &(R,G,B)
 # with channels 0–255, plus &b bold, &s strikethrough, &u underline, &i italic,
 # &o obfuscated and &r reset. Other ampersands are literal text.
 health_bar_prefix: "&(0,255,0)HP "        # Text shown before the health bar.

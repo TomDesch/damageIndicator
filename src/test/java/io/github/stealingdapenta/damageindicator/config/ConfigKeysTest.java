@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.config;
 
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.*;
 import static io.github.stealingdapenta.damageindicator.config.ConfigurationFileManager.CONFIGURATION_FILE_MANAGER;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -50,11 +51,11 @@ class ConfigKeysTest {
             assertNotNull(resource);
             config.load(new InputStreamReader(resource, StandardCharsets.UTF_8));
         }
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         Map<ConfigKeys, String> bundled = strings();
 
         freshConfig();
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
 
         assertEquals(bundled, strings());
         assertFalse(ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean());
@@ -69,7 +70,7 @@ class ConfigKeysTest {
         for (Object value : List.of(true, false, "true", "false", " TRUE ", "False")) {
             freshConfig();
             config.set("enable_damage_indicator", value);
-            CONFIGURATION_FILE_MANAGER.loadConfig();
+            loadPreloaded();
             assertEquals(Boolean.parseBoolean(value.toString().trim()), ENABLE_DAMAGE_INDICATOR.asBoolean());
             verifyNoInteractions(logger);
         }
@@ -87,7 +88,7 @@ class ConfigKeysTest {
                 "enable_damage_indicator: []", "enable_damage_indicator: {enabled: true}")) {
             freshConfig();
             config.loadFromString(yaml);
-            CONFIGURATION_FILE_MANAGER.loadConfig();
+            loadPreloaded();
             assertTrue(ENABLE_DAMAGE_INDICATOR.asBoolean(), yaml);
             verify(logger).warning(contains("'enable_damage_indicator'"));
         }
@@ -102,7 +103,7 @@ class ConfigKeysTest {
             for (int valid : List.of(1, entry.getValue())) {
                 freshConfig();
                 config.set(key.getConfigKey(), valid);
-                CONFIGURATION_FILE_MANAGER.loadConfig();
+                loadPreloaded();
                 assertEquals(valid, key.asInt());
                 assertEquals((double) valid, key.asDouble());
                 verifyNoInteractions(logger);
@@ -128,7 +129,7 @@ class ConfigKeysTest {
             for (double value : entry.getValue()) {
                 freshConfig();
                 config.set(key.getConfigKey(), value);
-                CONFIGURATION_FILE_MANAGER.loadConfig();
+                loadPreloaded();
                 assertEquals(value, key.asDouble(), key.toString());
                 verifyNoInteractions(logger);
             }
@@ -148,7 +149,7 @@ class ConfigKeysTest {
                 "damage_merge_timeout: {seconds: 1}", "damage_merge_timeout: false")) {
             freshConfig();
             config.loadFromString(yaml);
-            CONFIGURATION_FILE_MANAGER.loadConfig();
+            loadPreloaded();
             assertEquals(1.5, DAMAGE_MERGE_TIMEOUT.asDouble(), yaml);
             verify(logger).warning(contains("'damage_merge_timeout'"));
         }
@@ -157,7 +158,7 @@ class ConfigKeysTest {
     @Test
     void quotedNumericScalarsAreTrimmedAndParsed() throws Exception {
         config.loadFromString("hologram_follow_speed: ' 45 '\ndamage_merge_timeout: ' 2.5e1 '");
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         assertEquals(45, HOLOGRAM_FOLLOW_SPEED.asInt());
         assertEquals(25, DAMAGE_MERGE_TIMEOUT.asDouble());
         verifyNoInteractions(logger);
@@ -166,7 +167,7 @@ class ConfigKeysTest {
     @Test
     void validColorsUseInclusiveChannelsAndWhitespace() {
         config.set("magic", "&( 0, 255, 123 )");
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         assertEquals(TextColor.color(0, 255, 123), MAGIC.getTextColor());
         assertSame(MAGIC.getTextColor(), MAGIC.getTextColor());
         verifyNoInteractions(logger);
@@ -192,28 +193,32 @@ class ConfigKeysTest {
         for (ConfigKeys key : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
             freshConfig();
             config.set(key.getConfigKey(), "");
-            CONFIGURATION_FILE_MANAGER.loadConfig();
+            loadPreloaded();
             assertEquals("", key.asFormattedString().content());
             verifyNoInteractions(logger);
         }
         freshConfig();
         config.set("health_bar_prefix", "A & Z");
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         assertEquals("A & Z", HEALTH_BAR_PREFIX.asFormattedString().content());
         verifyNoInteractions(logger);
     }
 
     @Test
-    void configuredTextLimitsBoundEveryRepeatedBarSymbol() {
+    void individualTextLimitsAreEnforcedWhenCombinedOutputFits() {
         for (ConfigKeys key : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
             int limit = key == HEALTH_BAR_PREFIX || key == HEALTH_BAR_SUFFIX ? 256 : 32;
             freshConfig();
+            for (ConfigKeys appearance : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
+                config.set(appearance.getConfigKey(), "");
+            }
             config.set(key.getConfigKey(), "x".repeat(limit));
-            config.set("health_bar_length", 100);
-            CONFIGURATION_FILE_MANAGER.loadConfig();
+            int length = limit == 256 ? 100 : 1;
+            config.set("health_bar_length", length);
+            loadPreloaded();
             assertEquals(limit, key.asFormattedString().content().length());
             assertSame(key.asFormattedString(), key.asFormattedString());
-            assertEquals(100, HEALTH_BAR_LENGTH.asInt());
+            assertEquals(length, HEALTH_BAR_LENGTH.asInt());
             verifyNoInteractions(logger);
             invalid(key, "x".repeat(limit + 1));
             assertEquals(key.getDefaultValue(), key.asString());
@@ -225,11 +230,90 @@ class ConfigKeysTest {
     }
 
     @Test
+    void oversizedCombinedPrefixFallsBackToDefaultAppearanceButRetainsLength() {
+        config.set("health_bar_length", 100);
+        config.set("health_bar_prefix", "P".repeat(240));
+        config.set("health_bar_suffix", "suffix");
+        config.set("health_bar_alive_symbol", "A");
+        config.set("health_bar_dead_symbol", "D");
+
+        loadPreloaded();
+
+        assertDefaultAppearanceAndBoundedOutput(100);
+        assertEquals("P".repeat(240), config.getString("health_bar_prefix"), "Keep user input available for correction");
+        verify(logger).warning(contains("256 UTF-16"));
+        verifyNoMoreInteractions(logger);
+    }
+
+    @Test
+    void multicolorRepeatedSymbolFallsBackOnceWithoutHotPathYamlAccess() {
+        config.set("health_bar_length", 100);
+        config.set("health_bar_prefix", "custom prefix");
+        config.set("health_bar_suffix", "custom suffix");
+        config.set("health_bar_alive_symbol", "&(1,2,3)A&(4,5,6)B");
+        config.set("health_bar_dead_symbol", "D");
+        YamlConfiguration tracked = spy(config);
+        when(plugin.getConfig()).thenReturn(tracked);
+
+        loadPreloaded();
+
+        assertDefaultAppearanceAndBoundedOutput(100);
+        clearInvocations(tracked);
+        for (int tick = 0; tick < 200; tick++) {
+            assertTrue(serializedBar(tick % 101).length() <= 256);
+        }
+        verifyNoInteractions(tracked);
+        verify(logger).warning(contains("256 UTF-16"));
+        verifyNoMoreInteractions(logger);
+    }
+
+    @Test
+    void intermediateHealthStateCanExceedLimitEvenWhenBothEndpointsFit() {
+        config.set("health_bar_length", 20);
+        config.set("health_bar_prefix", "P".repeat(234));
+        config.set("health_bar_suffix", "");
+        config.set("health_bar_alive_symbol", "&bA");
+        config.set("health_bar_dead_symbol", "D");
+        assertEquals(254, serializedBar(0).length());
+        assertEquals(256, serializedBar(20).length());
+        assertTrue(serializedBar(10).length() > 256, "The bold-to-plain reset adds serialized characters");
+
+        loadPreloaded();
+
+        assertDefaultAppearanceAndBoundedOutput(20);
+        verify(logger).warning(contains("256 UTF-16"));
+        verifyNoMoreInteractions(logger);
+    }
+
+    @Test
+    void exactCombinedBoundaryIsAcceptedAndCanReplacePreviousFallback() {
+        config.set("health_bar_length", 100);
+        config.set("health_bar_alive_symbol", "&(1,2,3)A&(4,5,6)B");
+        loadPreloaded();
+        assertDefaultAppearanceAndBoundedOutput(100);
+        clearInvocations(logger);
+        config.set("health_bar_length", 16);
+        config.set("health_bar_prefix", "P".repeat(236));
+        config.set("health_bar_suffix", "TAIL");
+        config.set("health_bar_alive_symbol", "A");
+        config.set("health_bar_dead_symbol", "D");
+
+        loadPreloaded();
+
+        assertEquals("P".repeat(236), HEALTH_BAR_PREFIX.asString());
+        assertEquals("TAIL", HEALTH_BAR_SUFFIX.asString());
+        for (int alive = 0; alive <= 16; alive++) {
+            assertEquals(256, serializedBar(alive).length());
+        }
+        verifyNoInteractions(logger);
+    }
+
+    @Test
     void loadValidatesEvenUnusedSettingsAndWarnsOnlyOncePerKeyNotPerTick() {
         config.set("magic", "not a color");
         config.set("poison", "&(300,0,0)");
         config.set("health_bar_prefix", "&(1,2) broken");
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         verify(logger, times(3)).warning(anyString());
         for (int tick = 0; tick < 200; tick++) {
             MAGIC.getTextColor();
@@ -243,7 +327,7 @@ class ConfigKeysTest {
     void accessorsUseCachedValuesWithoutAnyYamlReadsAfterLoading() {
         YamlConfiguration tracked = spy(config);
         when(plugin.getConfig()).thenReturn(tracked);
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         clearInvocations(tracked, logger);
         for (int tick = 0; tick < 200; tick++) {
             assertTrue(ENABLE_DAMAGE_INDICATOR.asBoolean());
@@ -260,7 +344,7 @@ class ConfigKeysTest {
 
     @Test
     void extraAccessorConstraintsFallbackAndWarnOnceForCurrentSnapshot() {
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         for (int tick = 0; tick < 200; tick++) {
             assertEquals(30, HOLOGRAM_FOLLOW_SPEED.asIntAtLeast(30));
             assertEquals(10, HEALTH_BAR_LENGTH.asIntBetween(1, 10));
@@ -273,7 +357,7 @@ class ConfigKeysTest {
 
     @Test
     void changedPluginOrConfigCannotInheritAnOldSnapshot() {
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         config.set("health_bar_length", 42);
         DamageIndicator another = mock(DamageIndicator.class);
         when(another.getConfig()).thenReturn(config);
@@ -289,7 +373,7 @@ class ConfigKeysTest {
 
     @Test
     void standaloneMockPluginStillReadsItsOwnConfiguration() {
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         var mockedConfig = mock(YamlConfiguration.class);
         when(mockedConfig.getString("enable_hologram_health_bar")).thenReturn("true");
         when(plugin.getConfig()).thenReturn(mockedConfig);
@@ -304,7 +388,7 @@ class ConfigKeysTest {
         try {
             Locale.setDefault(Locale.forLanguageTag("tr-TR"));
             config.set("enable_damage_indicator", false);
-            CONFIGURATION_FILE_MANAGER.loadConfig();
+            loadPreloaded();
             assertFalse(ENABLE_DAMAGE_INDICATOR.asBoolean());
             assertTrue(config.contains("enable_damage_indicator", true));
             assertFalse(config.contains("enable_damage_ındıcator", true));
@@ -322,7 +406,7 @@ class ConfigKeysTest {
     private void invalid(ConfigKeys key, Object value) {
         freshConfig();
         config.set(key.getConfigKey(), value);
-        CONFIGURATION_FILE_MANAGER.loadConfig();
+        loadPreloaded();
         verify(logger).warning(contains("'" + key.getConfigKey() + "'"));
         verifyNoMoreInteractions(logger);
     }
@@ -333,5 +417,27 @@ class ConfigKeysTest {
             values.put(key, key.asString());
         }
         return values;
+    }
+
+    private void loadPreloaded() {
+        CONFIGURATION_FILE_MANAGER.loadConfig(plugin, plugin.getConfig());
+    }
+
+    private void assertDefaultAppearanceAndBoundedOutput(int length) {
+        assertEquals(length, HEALTH_BAR_LENGTH.asInt());
+        for (ConfigKeys key : List.of(HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL)) {
+            assertEquals(key.getDefaultValue(), key.asString(), key.toString());
+        }
+        for (int alive = 0; alive <= length; alive++) {
+            assertTrue(serializedBar(alive).length() <= 256, "Alive count " + alive);
+        }
+    }
+
+    private String serializedBar(int alive) {
+        int length = HEALTH_BAR_LENGTH.asInt();
+        return TEXT_UTIL.serializeComponent(HEALTH_BAR_PREFIX.asFormattedString()
+                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive))
+                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), length - alive))
+                .append(HEALTH_BAR_SUFFIX.asFormattedString()));
     }
 }

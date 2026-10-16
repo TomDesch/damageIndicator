@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
+import io.github.stealingdapenta.damageindicator.config.ConfigurationLoadException;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -19,6 +20,22 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 class ReloadConfigCommandTest {
+
+    @Test
+    void invalidConfigurationReportsFailureInsteadOfSuccess() {
+        when(mockCommandSender.hasPermission("damageindicator.reload")).thenReturn(true);
+        DamageIndicator plugin = mock(DamageIndicator.class);
+        org.mockito.Mockito.doThrow(new ConfigurationLoadException("Invalid YAML", new IllegalArgumentException()))
+                .when(plugin).reloadConfiguration();
+        try (MockedStatic<DamageIndicator> singleton = mockStatic(DamageIndicator.class)) {
+            singleton.when(DamageIndicator::getInstance).thenReturn(plugin);
+            assertTrue(reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[0]));
+        }
+        verify(mockCommandSender).sendMessage(
+                "Configuration reload failed; the previous configuration is still active. Check the server log.");
+        verify(mockCommandSender, org.mockito.Mockito.never()).sendMessage(
+                "Successfully reloaded the DamageIndicator configuration file.");
+    }
 
     private static final String LABEL = "label";
     private ReloadConfigCommand reloadConfigCommand;

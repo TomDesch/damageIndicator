@@ -3,6 +3,7 @@ package io.github.stealingdapenta.damageindicator.config;
 import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,6 +17,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 final class RuntimeConfiguration {
 
     private static final Pattern RGB = Pattern.compile("&\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*\\)");
+    private static final int MAX_SERIALIZED_HEALTH_BAR_LENGTH = 256;
+    private static final List<ConfigKeys> HEALTH_BAR_APPEARANCE = List.of(ConfigKeys.HEALTH_BAR_PREFIX,
+            ConfigKeys.HEALTH_BAR_SUFFIX, ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL, ConfigKeys.HEALTH_BAR_DEAD_SYMBOL);
     private final JavaPlugin plugin;
     private final FileConfiguration source;
     private final Map<ConfigKeys, Value> values;
@@ -32,6 +36,7 @@ final class RuntimeConfiguration {
         for (ConfigKeys key : ConfigKeys.values()) {
             values.put(key, read(plugin, config, key));
         }
+        validateHealthBarOutput(plugin, values);
         return new RuntimeConfiguration(plugin, config, values);
     }
 
@@ -41,6 +46,10 @@ final class RuntimeConfiguration {
 
     boolean matches(JavaPlugin plugin, FileConfiguration config) {
         return this.plugin == plugin && source == config;
+    }
+
+    RuntimeConfiguration withSource(FileConfiguration config) {
+        return new RuntimeConfiguration(plugin, config, values);
     }
 
     Value value(ConfigKeys key) {
@@ -63,6 +72,29 @@ final class RuntimeConfiguration {
         } catch (IllegalArgumentException exception) {
             warn(plugin, key, exception.getMessage());
             return parse(key, key.getDefaultValue());
+        }
+    }
+
+    private static void validateHealthBarOutput(JavaPlugin plugin, Map<ConfigKeys, Value> values) {
+        int length = values.get(ConfigKeys.HEALTH_BAR_LENGTH).integer();
+        TextComponent prefix = values.get(ConfigKeys.HEALTH_BAR_PREFIX).formatted();
+        TextComponent suffix = values.get(ConfigKeys.HEALTH_BAR_SUFFIX).formatted();
+        TextComponent alive = values.get(ConfigKeys.HEALTH_BAR_ALIVE_SYMBOL).formatted();
+        TextComponent dead = values.get(ConfigKeys.HEALTH_BAR_DEAD_SYMBOL).formatted();
+        for (int aliveCount = 0; aliveCount <= length; aliveCount++) {
+            TextComponent bar = prefix.append(TEXT_UTIL.repeatTextWithStyles(alive, aliveCount))
+                    .append(TEXT_UTIL.repeatTextWithStyles(dead, length - aliveCount))
+                    .append(suffix);
+            if (TEXT_UTIL.serializeComponent(bar).length() > MAX_SERIALIZED_HEALTH_BAR_LENGTH) {
+                plugin.getLogger().warning("Configured health bar exceeds Spigot's 256 UTF-16 character serialized name limit"
+                        + " with " + aliveCount + " alive symbols out of " + length
+                        + ". Using default health_bar_prefix, health_bar_suffix, health_bar_alive_symbol and health_bar_dead_symbol;"
+                        + " retaining health_bar_length=" + length + ".");
+                for (ConfigKeys key : HEALTH_BAR_APPEARANCE) {
+                    values.put(key, parse(key, key.getDefaultValue()));
+                }
+                return;
+            }
         }
     }
 
