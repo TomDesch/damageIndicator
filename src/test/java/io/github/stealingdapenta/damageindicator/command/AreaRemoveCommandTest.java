@@ -18,6 +18,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,8 +64,10 @@ class AreaRemoveCommandTest {
 
     @Test
     void onCommand_with2Enemies_successWithMessage() {
-        Entity mockEntity1 = mock(Entity.class);
-        Entity mockEntity2 = mock(Entity.class);
+        ArmorStand mockEntity1 = mock(ArmorStand.class);
+        ArmorStand mockEntity2 = mock(ArmorStand.class);
+        when(mockEntity1.isValid()).thenReturn(true);
+        when(mockEntity2.isValid()).thenReturn(true);
 
         List<Entity> nearbyEntities = Arrays.asList(mockEntity1, mockEntity2);
         when(mockPlayer.getNearbyEntities(50, 50, 50)).thenReturn(nearbyEntities);
@@ -96,5 +99,28 @@ class AreaRemoveCommandTest {
         verify(mockPlayer).sendMessage(captor.capture());
 
         assertEquals("Successfully removed 2 nearby entities.", captor.getValue());
+    }
+
+    @Test
+    void denialDoesNotQueryEntitiesOrRunCleanup() {
+        when(mockPlayer.hasPermission("damageindicator.arearemove")).thenReturn(false);
+        areaRemoveCommand.onCommand(mockPlayer, mockCommand, LABEL, new String[0]);
+        org.mockito.Mockito.verify(mockPlayer, org.mockito.Mockito.never()).getNearbyEntities(50, 50, 50);
+    }
+
+    @Test
+    void untaggedArmorStandsAndTaggedNonArmorStandsAreNotRemoved() {
+        ArmorStand unrelated = mock(ArmorStand.class);
+        Entity otherType = mock(Entity.class);
+        when(unrelated.isValid()).thenReturn(true);
+        PersistentDataContainer data = mock(PersistentDataContainer.class);
+        when(unrelated.getPersistentDataContainer()).thenReturn(data);
+        when(mockPlayer.getNearbyEntities(50, 50, 50)).thenReturn(List.of(unrelated, otherType));
+
+        areaRemoveCommand.onCommand(mockPlayer, mockCommand, LABEL, new String[0]);
+
+        org.mockito.Mockito.verify(unrelated, org.mockito.Mockito.never()).remove();
+        org.mockito.Mockito.verify(otherType, org.mockito.Mockito.never()).remove();
+        org.mockito.Mockito.verify(otherType, org.mockito.Mockito.never()).getPersistentDataContainer();
     }
 }

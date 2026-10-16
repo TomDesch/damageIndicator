@@ -33,6 +33,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
@@ -208,6 +209,29 @@ class CustomNameListenerTest {
     }
 
     @Test
+    void areaRenameDetachesTheRealNameFollowerBeforeClearingNames() {
+        MobState mob = mob("Original", true);
+        listener.refreshLoadedEntities();
+        Player operator = mock(Player.class);
+        when(operator.hasPermission("damageindicator.arearename")).thenReturn(true);
+        when(operator.getNearbyEntities(50, 50, 50)).thenReturn(List.of(mob.entity, stands.getFirst().entity));
+        doAnswer(invocation -> {
+            listener.clearDisplay(invocation.getArgument(0));
+            return null;
+        }).when(plugin).clearNameDisplays(any(LivingEntity.class));
+
+        new io.github.stealingdapenta.damageindicator.command.AreaRenameCommand().onCommand(
+                operator, mock(org.bukkit.command.Command.class), "arearename", new String[0]);
+        advance(40);
+
+        assertEquals(null, mob.name.get());
+        assertFalse(mob.visible.get());
+        assertFalse(stands.getFirst().valid.get());
+        assertEquals(1, stands.size());
+        assertFalse(mob.data.containsKey("custom-name-hidden"));
+    }
+
+    @Test
     void externallyRemovedStandCanBeRecreatedWithoutLosingTheName() {
         MobState mob = mob("Original", true);
         listener.refreshLoadedEntities();
@@ -308,6 +332,10 @@ class CustomNameListenerTest {
             when(entity.getHeight()).thenReturn(2.0);
             when(entity.getLocation()).thenAnswer(invocation -> new Location(world, 0, 64, 0));
             when(entity.getCustomName()).thenAnswer(invocation -> this.name.get());
+            doAnswer(invocation -> {
+                this.name.set(invocation.getArgument(0));
+                return null;
+            }).when(entity).setCustomName(any());
             when(entity.isCustomNameVisible()).thenAnswer(invocation -> this.visible.get());
             doAnswer(invocation -> {
                 this.visible.set(invocation.getArgument(0));
