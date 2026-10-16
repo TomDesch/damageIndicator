@@ -1,9 +1,8 @@
 package io.github.stealingdapenta.damageindicator.config;
 
-import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
-
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import java.util.List;
+import java.util.Locale;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -46,7 +45,7 @@ public enum ConfigKeys {
     SONIC_BOOM("&(255,215,0)"),
     OTHER("&(130,130,30)"),
     ENABLE_HEALTH_BAR("true"),
-    ENABLE_HOLOGRAM_HEALTH_BAR("true"),
+    ENABLE_HOLOGRAM_HEALTH_BAR("false"),
     HEALTH_BAR_DISPLAY_DURATION("5"),
     HEALTH_BAR_LENGTH("16"),
     HEALTH_BAR_PREFIX("&(0,255,0)HP "),
@@ -54,10 +53,10 @@ public enum ConfigKeys {
     HEALTH_BAR_ALIVE_SYMBOL("&(0,255,0)♥"),
     HEALTH_BAR_DEAD_SYMBOL("&(100,100,100)♡"),
     HOLOGRAM_POSITION("-0.3"),
-    ENABLE_HOLOGRAPHIC_CUSTOM_NAMES("true"),
+    ENABLE_HOLOGRAPHIC_CUSTOM_NAMES("false"),
     HOLOGRAM_NAME_POSITION("0"),
-    HOLOGRAM_FOLLOW_SPEED("3"),
-    HEALTH_BAR_ALWAYS_VISIBLE("false"),
+    HOLOGRAM_FOLLOW_SPEED("20"),
+    HEALTH_BAR_ALWAYS_VISIBLE("true"),
     ENABLE_DAMAGE_MERGE("true"),
     DAMAGE_MERGE_TIMEOUT("1.5"),
     DAMAGE_MERGE_JUMP_DURATION("15"),
@@ -66,9 +65,7 @@ public enum ConfigKeys {
 
     private final String defaultValue;
     private final List<String> legacyKeys;
-    private static final String PARSING_ERROR = "Error parsing the value in the config file for %s.";
-    private static final String RANGE_ERROR = "Value in the config file for %s must be at least %s. Using the default value.";
-    private static final String BOUNDED_RANGE_ERROR = "Value in the config file for %s must be between %s and %s. Using the default value.";
+    private static volatile RuntimeConfiguration runtime;
 
     ConfigKeys(String defaultValue, String... legacyKeys) {
         this.defaultValue = defaultValue;
@@ -80,7 +77,7 @@ public enum ConfigKeys {
     }
 
     public String getConfigKey() {
-        return name().toLowerCase();
+        return name().toLowerCase(Locale.ROOT);
     }
 
     public List<String> getLegacyKeys() {
@@ -88,87 +85,119 @@ public enum ConfigKeys {
     }
 
     public String asString() {
-        String value = getPlugin().getConfig()
-                                  .getString(getConfigKey());
-        return (value != null) ? value : defaultValue;
+        return value().text();
     }
 
     public boolean asBoolean() {
-        return Boolean.parseBoolean(asString());
+        return value().bool();
     }
 
     public int asInt() {
-        try {
-            return Integer.parseInt(asString());
-        } catch (NumberFormatException ex) {
-            logParseWarning(getConfigKey());
-            return Integer.parseInt(defaultValue);
-        }
+        return value().integer();
     }
 
     public int asIntAtLeast(int minimum) {
-        int value = asInt();
-        if (value >= minimum) {
-            return value;
-        }
-
-        logRangeWarning(minimum);
-        return Math.max(minimum, Integer.parseInt(defaultValue));
+        return asIntBetween(minimum, Integer.MAX_VALUE);
     }
 
     public int asIntBetween(int minimum, int maximum) {
-        int value = asInt();
+        if (minimum > maximum) {
+            throw new IllegalArgumentException("Minimum must not exceed maximum");
+        }
+        RuntimeConfiguration snapshot = snapshot();
+        int value = snapshot.value(this).integer();
         if (value >= minimum && value <= maximum) {
             return value;
         }
-
-        getPlugin().getLogger()
-                   .warning(BOUNDED_RANGE_ERROR.formatted(getConfigKey(), minimum, maximum));
+        snapshot.warnRangeOnce(this, minimum, maximum);
         return Math.max(minimum, Math.min(maximum, Integer.parseInt(defaultValue)));
     }
 
     public double asDouble() {
-        try {
-            double value = Double.parseDouble(asString());
-            if (!Double.isFinite(value)) {
-                throw new NumberFormatException("Value must be finite");
-            }
-            return value;
-        } catch (NumberFormatException ex) {
-            logParseWarning(getConfigKey());
-            return Double.parseDouble(defaultValue);
-        }
+        return value().number();
     }
 
     public double asDoubleAtLeast(double minimum) {
-        double value = asDouble();
+        if (!Double.isFinite(minimum)) {
+            throw new IllegalArgumentException("Minimum must be finite");
+        }
+        RuntimeConfiguration snapshot = snapshot();
+        double value = snapshot.value(this).number();
         if (value >= minimum) {
             return value;
         }
-
-        logRangeWarning(minimum);
+        snapshot.warnRangeOnce(this, minimum, Double.MAX_VALUE);
         return Math.max(minimum, Double.parseDouble(defaultValue));
     }
 
     public TextColor getTextColor() {
-        return TEXT_UTIL.parseRGB(asString());
+        return value().color();
     }
 
     public TextComponent asFormattedString() {
-        return TEXT_UTIL.parseFormattedString(asString());
+        return value().formatted();
     }
 
-    private void logParseWarning(String key) {
-        getPlugin().getLogger()
-                   .warning(PARSING_ERROR.formatted(key));
+    static void install(JavaPlugin plugin) {
+        runtime = RuntimeConfiguration.load(plugin, plugin.getConfig());
     }
 
-    private void logRangeWarning(Number minimum) {
-        getPlugin().getLogger()
-                   .warning(RANGE_ERROR.formatted(getConfigKey(), minimum));
+    private RuntimeConfiguration.Value value() {
+        return snapshot().value(this);
     }
 
-    private JavaPlugin getPlugin() {
-        return DamageIndicator.getInstance();
+    private RuntimeConfiguration snapshot() {
+        JavaPlugin plugin = DamageIndicator.getInstance();
+        var config = plugin.getConfig();
+        RuntimeConfiguration current = runtime;
+        if (current != null && current.matches(plugin, config)) {
+            return current;
+        }
+        // Before lifecycle loading, read only this key; standalone callers must not inherit another plugin's snapshot.
+        return RuntimeConfiguration.single(plugin, config, this);
+    }
+
+    ValueType valueType() {
+        return switch (this) {
+            case ENABLE_DAMAGE_INDICATOR, ENABLE_HEALTH_BAR, ENABLE_HOLOGRAM_HEALTH_BAR,
+                 ENABLE_HOLOGRAPHIC_CUSTOM_NAMES, HEALTH_BAR_ALWAYS_VISIBLE, ENABLE_DAMAGE_MERGE -> ValueType.BOOLEAN;
+            case HEALTH_BAR_DISPLAY_DURATION, HEALTH_BAR_LENGTH, HOLOGRAM_FOLLOW_SPEED,
+                 DAMAGE_MERGE_JUMP_DURATION -> ValueType.INTEGER;
+            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION, DAMAGE_MERGE_TIMEOUT,
+                 HOLOGRAM_VELOCITY_Y, HOLOGRAM_GRAVITY -> ValueType.DECIMAL;
+            case HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX, HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL -> ValueType.TEXT;
+            default -> ValueType.COLOR;
+        };
+    }
+
+    double minimum() {
+        return switch (this) {
+            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION -> -64;
+            case HOLOGRAM_VELOCITY_Y -> -10;
+            case DAMAGE_MERGE_TIMEOUT, HOLOGRAM_GRAVITY -> 0;
+            default -> 1;
+        };
+    }
+
+    double maximum() {
+        return switch (this) {
+            case HEALTH_BAR_DISPLAY_DURATION, HOLOGRAM_VELOCITY_Y, HOLOGRAM_GRAVITY -> 10;
+            case HEALTH_BAR_LENGTH -> 100;
+            case HOLOGRAM_POSITION, HOLOGRAM_NAME_POSITION -> 64;
+            case DAMAGE_MERGE_TIMEOUT -> 60;
+            default -> 200;
+        };
+    }
+
+    int maximumTextLength() {
+        return switch (this) {
+            case HEALTH_BAR_ALIVE_SYMBOL, HEALTH_BAR_DEAD_SYMBOL -> 32;
+            case HEALTH_BAR_PREFIX, HEALTH_BAR_SUFFIX -> 256;
+            default -> 64;
+        };
+    }
+
+    enum ValueType {
+        BOOLEAN, INTEGER, DECIMAL, COLOR, TEXT
     }
 }

@@ -13,6 +13,12 @@
 ###########################################################################################
 
 # === Feature Toggles ===
+# Missing keys use the bundled defaults below. Only true/false booleans are accepted.
+# Invalid types, malformed formatting, nonfinite numbers, and out-of-range values log
+# one warning per key on load/reload and use that key's default (not a clamped value).
+# Invalid entries remain in this file so you can correct them.
+# Explicit canonical keys win over legacy aliases, even if the canonical value is invalid.
+# Changes become active after /damageindicator:reload; load and reload use the same validation.
 
 enable_damage_indicator: true             # Shows animated floating numbers on entity damage.
 enable_health_bar: true                   # Displays health bars above mobs using their custom name.
@@ -24,8 +30,12 @@ enable_holographic_custom_names: false    # Replaces entity names with holograph
 
 health_bar_always_visible: true           # Keep the health bar visible at all times.
 health_bar_display_duration: 5            # Time in seconds the health bar stays after hit (range: 1–10).
-health_bar_length: 16                     # Total symbols shown in the bar.
+health_bar_length: 16                     # Total symbols shown in the bar (whole number: 1–100).
 
+# Formatted prefixes/suffixes: at most 256 characters each; symbols: at most 32 each.
+# This also bounds repeated bar output. Empty text is allowed. Formatting: &(R,G,B)
+# with channels 0–255, plus &b bold, &s strikethrough, &u underline, &i italic,
+# &o obfuscated and &r reset. Other ampersands are literal text.
 health_bar_prefix: "&(0,255,0)HP "        # Text shown before the health bar.
 health_bar_suffix: "&(0,255,0) <<"        # Text shown after the health bar.
 health_bar_alive_symbol: "&(0,255,0)♥"    # Symbol representing remaining health.
@@ -33,23 +43,25 @@ health_bar_dead_symbol: "&(100,100,100)♡" # Symbol representing lost health.
 
 # === Hologram Visual Settings ===
 
-hologram_position: -0.3                   # Vertical offset for hologram health bars.
-hologram_name_position: 0.0               # Vertical offset for holographic custom names.
-hologram_follow_speed: 20                 # Speed (in ticks) at which holograms follow entities.
+hologram_position: -0.3                   # Vertical offset for hologram health bars (range: -64–64).
+hologram_name_position: 0.0               # Vertical offset for holographic custom names (range: -64–64).
+hologram_follow_speed: 20                 # Follow interval in ticks (whole number: 1–200).
 
 # === Damage Merge Settings ===
 
 enable_damage_merge: true                 # Merge consecutive damage from same attacker into one hologram.
-damage_merge_timeout: 1.5                 # Seconds of inactivity before damage is finalized and jumps out.
-damage_merge_jump_duration: 15            # Duration in ticks for the jump animation before disappearing.
+damage_merge_timeout: 1.5                 # Seconds of inactivity before the final jump (range: 0–60).
+damage_merge_jump_duration: 15            # Jump animation duration in ticks (whole number: 1–200).
 
 # === Hologram Velocity Settings ===
 
-hologram_velocity_y: 0.15                 # Initial upward velocity of damage holograms (higher = faster rise).
-hologram_gravity: 0.01                    # Gravity applied each tick (higher = drops faster, 0 = floats).
+hologram_velocity_y: 0.15                 # Initial upward velocity (range: -10–10).
+hologram_gravity: 0.01                    # Gravity per tick (range: 0–10; 0 = floats).
 
 # === Damage Type Color Mapping ===
 # These define the color of floating damage indicators based on the damage cause.
+# Use only &(R,G,B), channels 0–255 (at most 64 characters including whitespace).
+# Legacy dryout is migrated to dry_out unless dry_out is explicitly configured.
 
 magic: "&(95,10,95)"
 poison: "&(0,100,20)"
