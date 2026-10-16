@@ -4,6 +4,7 @@ import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.AttackerVictimPair;
 import io.github.stealingdapenta.damageindicator.utils.MergedDamageInfo;
+import io.github.stealingdapenta.damageindicator.utils.NativeDamageAccounting;
 import io.github.stealingdapenta.damageindicator.utils.TextUtil;
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -89,7 +90,7 @@ public class DamageIndicatorListener implements Listener {
         }
         if (event.isCancelled()) return;
         Entity attacker = event instanceof EntityDamageByEntityEvent attack ? attack.getDamager() : null;
-        displayDamage(livingEntity, attacker, Math.min(event.getFinalDamage(), livingEntity.getHealth()), event.getCause());
+        displayDamage(livingEntity, attacker, NativeDamageAccounting.appliedDamage(event, livingEntity), event.getCause());
     }
 
     /** Receives actual HP lost (after shields/blocks), including virtual-health integrations. */
