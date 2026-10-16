@@ -6,7 +6,6 @@ import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.AttackerVictimPair;
-import io.github.stealingdapenta.damageindicator.utils.NativeDamageAccounting;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -17,6 +16,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BiConsumer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -33,6 +33,8 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
@@ -42,6 +44,8 @@ import org.bukkit.util.Vector;
 
 /**
  * Owns transient damage displays; a single ticker advances all merge and animation state.
+ * Native hits observe committed HP at the next hit, normal Bukkit heal/resurrection boundary, or heartbeat.
+ * Silent setHealth interleavings between those boundaries cannot be attributed reliably.
  */
 public class DamageIndicatorListener implements Listener {
 
@@ -52,10 +56,26 @@ public class DamageIndicatorListener implements Listener {
     private static final int DAMAGE_DECIMAL_PLACES = 2;
     private static final double MAX_HORIZONTAL_SPEED = 0.05;
     private static final double HIT_HEIGHT_OFFSET = 1;
+    private final BiConsumer<LivingEntity, Double> appliedDamageConsumer;
+    private final Map<UUID, PendingHit> pendingHits = new HashMap<>();
     private final Map<AttackerVictimPair, MergedDisplay> mergedDamage = new HashMap<>();
     private final Map<UUID, Animation> animations = new HashMap<>();
     private BukkitTask heartbeat;
     private long currentTick;
+    private long shutdownGeneration;
+    private boolean shuttingDown;
+
+    public DamageIndicatorListener() {
+        this((victim, damage) -> {
+        });
+    }
+
+    /**
+     * Delivers confirmed native HP loss synchronously, before optional numeric rendering.
+     */
+    public DamageIndicatorListener(BiConsumer<LivingEntity, Double> appliedDamageConsumer) {
+        this.appliedDamageConsumer = Objects.requireNonNull(appliedDamageConsumer);
+    }
 
     public static NamespacedKey getCustomNamespacedKey() {
         return HOLOGRAM_KEY;
@@ -81,10 +101,105 @@ public class DamageIndicatorListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayDamageIndicator(EntityDamageEvent event) {
-        if (event.getEntity() instanceof LivingEntity victim) {
-            Entity attacker = event instanceof EntityDamageByEntityEvent attack ? attack.getDamager() : null;
-            displayDamage(victim, attacker, NativeDamageAccounting.appliedDamage(event, victim), event.getCause());
+        if (shuttingDown || event.isCancelled() || !(event.getEntity() instanceof LivingEntity victim)) {
+            return;
         }
+        double finalDamage = event.getFinalDamage();
+        if (!Double.isFinite(finalDamage)) {
+            warnInvalidObservation("non-finite final damage", victim.getUniqueId());
+            return;
+        }
+        if (finalDamage <= 0) {
+            return;
+        }
+        long generation = shutdownGeneration;
+        flushPending(victim, false);
+        if (generation != shutdownGeneration || !victim.isValid() || !isDamageObservationEnabled()) {
+            return;
+        }
+        double health = victim.getHealth();
+        if (!isValidHealth(health, victim.getUniqueId()) || health == 0 || generation != shutdownGeneration) {
+            return;
+        }
+        Location location = getHitLocation(victim);
+        if (!hasWorld(location)) {
+            return;
+        }
+        Entity attacker = event instanceof EntityDamageByEntityEvent attack ? resolveAttacker(attack.getDamager()) : null;
+        if (generation != shutdownGeneration) {
+            return;
+        }
+        pendingHits.put(victim.getUniqueId(), new PendingHit(health, finalDamage, attacker == null ? null : attacker.getUniqueId(),
+                                                           event.getCause(), location, currentTick));
+        startHeartbeat();
+    }
+
+    private boolean isDamageObservationEnabled() {
+        return ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean() || ConfigKeys.ENABLE_HEALTH_BAR.asBoolean();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityRegainHealth(EntityRegainHealthEvent event) {
+        if (!event.isCancelled() && event.getEntity() instanceof LivingEntity victim) {
+            // Healing is not committed yet, so it must not erase the preceding hit.
+            flushPending(victim, false);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityResurrect(EntityResurrectEvent event) {
+        if (!event.isCancelled()) {
+            flushPending(event.getEntity(), true);
+        }
+    }
+
+    private void flushPending(UUID victimId) {
+        Entity entity = Bukkit.getEntity(victimId);
+        if (entity instanceof LivingEntity victim) {
+            flushPending(victim, false);
+        } else {
+            pendingHits.remove(victimId);
+        }
+    }
+
+    private void flushPending(LivingEntity victim, boolean terminal) {
+        PendingHit hit = pendingHits.remove(victim.getUniqueId());
+        if (hit == null || !terminal && !victim.isValid()) {
+            return;
+        }
+        long generation = shutdownGeneration;
+        double health = victim.getHealth();
+        if (!isValidHealth(health, victim.getUniqueId()) || generation != shutdownGeneration) {
+            return;
+        }
+        double damage = Math.min(hit.finalDamage(), Math.max(0, hit.health() - health));
+        if (shuttingDown || !Double.isFinite(damage) || damage <= 0) {
+            return;
+        }
+        appliedDamageConsumer.accept(victim, damage);
+        if (generation != shutdownGeneration || !canDisplayDamage(victim, damage)) {
+            return;
+        }
+        TextColor color = resolveColorForCause(hit.cause());
+        if (hit.attackerId() != null && ConfigKeys.ENABLE_DAMAGE_MERGE.asBoolean()) {
+            displayMergedDamage(victim.getUniqueId(), hit.attackerId(), hit.location(), damage, color, hit.tick());
+        } else {
+            animateArmorStand(hit.location(), damage, color);
+        }
+    }
+
+    private boolean isValidHealth(double health, UUID victimId) {
+        if (!Double.isFinite(health) || health < 0) {
+            warnInvalidObservation("invalid health", victimId);
+            return false;
+        }
+        return true;
+    }
+
+    private void warnInvalidObservation(String reason, UUID victimId) {
+        DamageIndicator.getInstance()
+                       .getLogger()
+                       .warning("Cannot observe native damage for " + victimId + ": " + reason + ".");
     }
 
     /**
@@ -95,10 +210,7 @@ public class DamageIndicatorListener implements Listener {
             return;
         }
         Location location = getHitLocation(victim);
-        if (location.getWorld() == null) {
-            DamageIndicator.getInstance()
-                           .getLogger()
-                           .warning("Cannot display damage without a victim world.");
+        if (!hasWorld(location)) {
             return;
         }
         TextColor color = resolveColorForCause(cause == null ? EntityDamageEvent.DamageCause.CUSTOM : cause);
@@ -107,11 +219,21 @@ public class DamageIndicatorListener implements Listener {
             return;
         }
 
-        displayMergedDamage(victim, resolveAttacker(attacker), location, damage, color);
+        displayMergedDamage(victim.getUniqueId(), resolveAttacker(attacker).getUniqueId(), location, damage, color, currentTick);
+    }
+
+    private boolean hasWorld(Location location) {
+        if (location.getWorld() != null) {
+            return true;
+        }
+        DamageIndicator.getInstance()
+                       .getLogger()
+                       .warning("Cannot display damage without a victim world.");
+        return false;
     }
 
     private boolean canDisplayDamage(LivingEntity victim, double damage) {
-        return victim != null && Double.isFinite(damage) && damage > 0 && ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean();
+        return !shuttingDown && victim != null && Double.isFinite(damage) && damage > 0 && ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean();
     }
 
     private boolean canMergeDamage(LivingEntity victim, Entity attacker) {
@@ -125,19 +247,27 @@ public class DamageIndicatorListener implements Listener {
         return attacker;
     }
 
-    private void displayMergedDamage(LivingEntity victim, Entity attacker, Location location, double damage, TextColor color) {
-        AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
+    private void displayMergedDamage(UUID victimId, UUID attackerId, Location location, double damage, TextColor color, long hitTick) {
+        long generation = shutdownGeneration;
+        AttackerVictimPair pair = new AttackerVictimPair(attackerId, victimId);
         MergedDisplay display = mergedDamage.get(pair);
         if (display != null && !display.stand.isValid()) {
             removeMerged(pair);
             display = null;
         }
+        if (generation != shutdownGeneration) {
+            return;
+        }
         if (display == null) {
             ArmorStand stand = createArmorStand(location, damage, color);
+            if (generation != shutdownGeneration) {
+                HOLOGRAPH_UTIL.remove(stand);
+                return;
+            }
             if (!stand.isValid()) {
                 return;
             }
-            display = new MergedDisplay(victim.getUniqueId(), stand, damage);
+            display = new MergedDisplay(victimId, stand, damage);
             mergedDamage.put(pair, display);
             HOLOGRAPH_UTIL.onCleanup(stand, () -> removeMerged(pair));
         } else {
@@ -147,13 +277,18 @@ public class DamageIndicatorListener implements Listener {
                                .getLogger()
                                .warning("Merged damage overflow; starting a new damage display.");
                 release(pair);
-                displayMergedDamage(victim, attacker, location, damage, color);
+                if (generation == shutdownGeneration) {
+                    displayMergedDamage(victimId, attackerId, location, damage, color, hitTick);
+                }
                 return;
             }
             display.damage = total;
             display.stand.setCustomName(formatDamage(total, color));
         }
-        display.deadline = currentTick + (long) Math.ceil(ConfigKeys.DAMAGE_MERGE_TIMEOUT.asDouble() * TICKS_PER_SECOND);
+        if (generation != shutdownGeneration || mergedDamage.get(pair) != display) {
+            return;
+        }
+        display.deadline = hitTick + (long) Math.ceil(ConfigKeys.DAMAGE_MERGE_TIMEOUT.asDouble() * TICKS_PER_SECOND);
         startHeartbeat();
     }
 
@@ -182,8 +317,14 @@ public class DamageIndicatorListener implements Listener {
     }
 
     public void animateArmorStand(Location location, double damage, TextColor color) {
+        if (shuttingDown) {
+            return;
+        }
+        long generation = shutdownGeneration;
         ArmorStand stand = createArmorStand(location, damage, color);
-        if (stand.isValid()) {
+        if (generation != shutdownGeneration) {
+            HOLOGRAPH_UTIL.remove(stand);
+        } else if (stand.isValid()) {
             startAnimation(stand, ANIMATION_DURATION_TICKS);
         }
     }
@@ -201,7 +342,7 @@ public class DamageIndicatorListener implements Listener {
     }
 
     private void startHeartbeat() {
-        if (heartbeat == null) {
+        if (!shuttingDown && heartbeat == null) {
             heartbeat = Bukkit.getScheduler()
                               .runTaskTimer(DamageIndicator.getInstance(), this::advance, HEARTBEAT_PERIOD_TICKS, HEARTBEAT_PERIOD_TICKS);
         }
@@ -210,9 +351,10 @@ public class DamageIndicatorListener implements Listener {
     private void advance() {
         currentTick++;
         // Entity callbacks can detach other displays while this snapshot is processed.
+        new ArrayList<>(pendingHits.keySet()).forEach(this::flushPending);
         new ArrayList<>(mergedDamage.keySet()).forEach(this::advanceMergedDisplay);
         new ArrayList<>(animations.keySet()).forEach(this::advanceAnimation);
-        if (heartbeat != null && mergedDamage.isEmpty() && animations.isEmpty()) {
+        if (heartbeat != null && pendingHits.isEmpty() && mergedDamage.isEmpty() && animations.isEmpty()) {
             heartbeat.cancel();
             heartbeat = null;
         }
@@ -284,6 +426,9 @@ public class DamageIndicatorListener implements Listener {
     public void onEntityDeath(EntityDeathEvent event) {
         UUID id = event.getEntity()
                        .getUniqueId();
+        // Death can invalidate the victim before this callback, but its final merged number must survive.
+        flushPending(event.getEntity(), true);
+        flushPendingForAttackers(Set.of(id));
         new ArrayList<>(mergedDamage.keySet()).stream()
                                               .filter(pair -> pair.involves(id))
                                               .forEach(this::release);
@@ -326,6 +471,8 @@ public class DamageIndicatorListener implements Listener {
      * Victim/display removal destroys a number; attacker removal only releases its completed hit.
      */
     private void removeForEntities(Set<UUID> ids) {
+        pendingHits.keySet().removeAll(ids);
+        flushPendingForAttackers(ids);
         for (AttackerVictimPair pair : new ArrayList<>(mergedDamage.keySet())) {
             MergedDisplay display = mergedDamage.get(pair);
             if (display == null) {
@@ -344,18 +491,50 @@ public class DamageIndicatorListener implements Listener {
         }
     }
 
-    public void shutdown() {
-        if (heartbeat != null) {
-            heartbeat.cancel();
-            heartbeat = null;
+    private void flushPendingForAttackers(Set<UUID> ids) {
+        for (UUID victimId : new ArrayList<>(pendingHits.keySet())) {
+            PendingHit hit = pendingHits.get(victimId);
+            if (hit != null && hit.attackerId() != null && ids.contains(hit.attackerId())) {
+                flushPending(victimId);
+            }
         }
-        new ArrayList<>(mergedDamage.keySet()).forEach(this::removeMerged);
-        new ArrayList<>(animations.keySet()).forEach(this::removeAnimation);
+    }
+
+    public void shutdown() {
+        if (shuttingDown) {
+            return;
+        }
+        shuttingDown = true;
+        try {
+            shutdownGeneration++;
+            pendingHits.clear();
+            if (heartbeat != null) {
+                heartbeat.cancel();
+                heartbeat = null;
+            }
+            new ArrayList<>(mergedDamage.keySet()).forEach(this::removeMerged);
+            new ArrayList<>(animations.keySet()).forEach(this::removeAnimation);
+        } finally {
+            shuttingDown = false;
+        }
     }
 
     public Location getHitLocation(Entity entity) {
         return entity.getLocation()
                      .add(0, HIT_HEIGHT_OFFSET, 0);
+    }
+
+    private record PendingHit(double health, double finalDamage, UUID attackerId, EntityDamageEvent.DamageCause cause,
+                              Location location, long tick) {
+
+        private PendingHit {
+            location = location.clone();
+        }
+
+        @Override
+        public Location location() {
+            return location.clone();
+        }
     }
 
     private static final class MergedDisplay {

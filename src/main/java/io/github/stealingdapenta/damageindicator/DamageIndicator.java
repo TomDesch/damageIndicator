@@ -27,8 +27,9 @@ public class DamageIndicator extends JavaPlugin {
     private static DamageIndicator instance;
     private boolean configured;
 
-    private final DamageIndicatorListener damageIndicatorListener = new DamageIndicatorListener();
     private final HealthBarListener healthBarListener = new HealthBarListener();
+    private final DamageIndicatorListener damageIndicatorListener =
+            new DamageIndicatorListener(healthBarListener::showCommittedDamage);
     private final CustomNameListener customNamesListener = new CustomNameListener();
     private final ReloadConfigCommand reloadConfigCommand = new ReloadConfigCommand();
     private final AreaRemoveCommand areaRemoveCommand = new AreaRemoveCommand();

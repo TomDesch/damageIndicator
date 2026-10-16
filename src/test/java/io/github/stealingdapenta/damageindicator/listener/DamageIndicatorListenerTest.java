@@ -86,6 +86,9 @@ class DamageIndicatorListenerTest {
         EntityDamageByEntityEvent event = new EntityDamageByEntityEvent(attacker, victim, EntityDamageEvent.DamageCause.ENTITY_ATTACK, fixture.damageSource, 100);
 
         listener.displayDamageIndicator(event);
+        assertEquals(0, stands.size());
+        model.health = 0;
+        advance(1);
         assertEquals("3.0", stands.getFirst()
                                   .number());
         event.setCancelled(true);

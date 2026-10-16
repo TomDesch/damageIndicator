@@ -15,7 +15,6 @@ import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLO
 import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.utils.NativeDamageAccounting;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,7 +34,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
@@ -50,7 +48,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
- * Activation-based bars updated from committed health by one next-tick heartbeat. UUID tracking avoids retaining unloaded wrappers; players use holograms only.
+ * Activation-based bars rendered from committed health. One heartbeat follows displays and defers pre-commit healing; UUID tracking avoids retaining unloaded wrappers. Players use holograms only.
  */
 public class HealthBarListener implements Listener {
 
@@ -74,14 +72,13 @@ public class HealthBarListener implements Listener {
         return Objects.requireNonNull(NamespacedKey.fromString("damageindicator:" + value));
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void displayHealthBar(EntityDamageEvent event) {
-        if (!ENABLE_HEALTH_BAR.asBoolean()) {
+    /** Receives confirmed native HP loss and renders already committed health without another delay. */
+    public void showCommittedDamage(LivingEntity entity, double appliedDamage) {
+        if (!Double.isFinite(appliedDamage) || appliedDamage <= 0 || !canDisplay(entity)) {
             return;
         }
-        if (event.getEntity() instanceof LivingEntity entity && NativeDamageAccounting.appliedDamage(event, entity) > 0) {
-            queueRefresh(entity);
-        }
+        activate(entity);
+        startHeartbeat();
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -146,7 +143,7 @@ public class HealthBarListener implements Listener {
     }
 
     /**
-     * Multiple damage/heal events in one tick share a single committed-health read.
+     * Healing and resurrection events in one tick share a single committed-health read.
      */
     private void flushHealthUpdates() {
         for (UUID id : new ArrayList<>(pendingRefreshes)) {

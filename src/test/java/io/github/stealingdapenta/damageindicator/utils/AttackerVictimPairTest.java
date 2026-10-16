@@ -17,6 +17,25 @@ import org.junit.jupiter.api.Test;
 class AttackerVictimPairTest {
 
     @Test
+    void uuidConstructorMatchesEntityConstructorWithoutRetainingWrappers() {
+        Entity attacker = mock(Entity.class);
+        Entity victim = mock(Entity.class);
+        UUID attackerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+
+        AttackerVictimPair captured = new AttackerVictimPair(attackerId, victimId);
+        AttackerVictimPair wrapped = new AttackerVictimPair(attacker, victim);
+
+        assertEquals(wrapped, captured);
+        assertEquals(wrapped.hashCode(), captured.hashCode());
+        assertTrue(captured.involvesAny(Set.of(attackerId)));
+        assertTrue(captured.involves(victimId));
+        assertEquals(new AttackerVictimPair(null, victim), new AttackerVictimPair((UUID) null, victimId));
+    }
+
+    @Test
     void batchCleanupMatchesEitherIdentityAndSupportsNoAttacker() {
         Entity attacker = mock(Entity.class);
         Entity victim = mock(Entity.class);

@@ -37,7 +37,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
@@ -194,21 +193,23 @@ class HealthBarListenerTest {
     }
 
     @Test
-    void repeatedDamageReadsCommittedHealthOnceAndUsesOneHeartbeat() {
+    void committedDamageUsesCurrentHealthImmediatelyAndSharesOneHeartbeat() {
+        config.set("enable_damage_indicator", false);
         Model mob = mob("Original");
+        mob.health = 18;
         damage(mob, 2);
-        damage(mob, 3);
-        assertEquals("Original", mob.name);
+        assertEquals("AAAAAAAAAD", mob.name);
         mob.health = 14;
-        advance(1);
+        damage(mob, 4);
         assertEquals("AAAAAAADDD", mob.name);
         assertEquals(1, scheduled.size());
-        damage(mob, 1);
         mob.health = 8;
-        advance(1);
+        damage(mob, 6);
         assertEquals("AAAADDDDDD", mob.name);
         assertEquals(1, scheduled.size());
-        advance(20);
+        advance(19);
+        assertEquals("AAAADDDDDD", mob.name);
+        advance(1);
         assertEquals("Original", mob.name);
         assertFalse(mob.visible);
         assertTrue(scheduled.getFirst()
@@ -332,9 +333,8 @@ class HealthBarListenerTest {
         Model mob = mob(null);
         damage(mob, 1);
         advance(1);
-        damage(mob, 1);
         mob.health = 10;
-        advance(1);
+        damage(mob, 10);
         assertEquals(1, stands.size());
         assertEquals("AAAAADDDDD", stands.getFirst().name);
         advance(19);
@@ -451,9 +451,8 @@ class HealthBarListenerTest {
         assertEquals("Original", mob.name);
         listener.refreshPersistedHolograms();
         assertEquals("AAAAAAAAAA", mob.name);
-        damage(mob, 2);
         mob.health = 10;
-        advance(1);
+        damage(mob, 10);
         assertEquals("AAAAADDDDD", mob.name);
         listener.shutdown();
         config.set("enable_health_bar", false);
@@ -465,8 +464,8 @@ class HealthBarListenerTest {
     @Test
     void temporaryHealRefreshesAnExistingBarAndResetsItsExpiry() {
         Model mob = mob("Original");
-        damage(mob, 1);
         mob.health = 10;
+        damage(mob, 10);
         advance(18);
         heal(mob, 6);
         mob.health = 16;
@@ -476,6 +475,21 @@ class HealthBarListenerTest {
         assertEquals("AAAAAAAADD", mob.name);
         advance(1);
         assertEquals("Original", mob.name);
+        assertEquals(1, scheduled.size());
+    }
+
+    @Test
+    void committedDamageActivatesImmediatelyButFollowingHealingWaitsForItsCommit() {
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 10);
+        assertEquals("AAAAADDDDD", mob.name);
+        heal(mob, 6);
+        heal(mob, 2);
+        assertEquals("AAAAADDDDD", mob.name);
+        mob.health = 18;
+        advance(1);
+        assertEquals("AAAAAAAAAD", mob.name);
         assertEquals(1, scheduled.size());
     }
 
@@ -547,6 +561,7 @@ class HealthBarListenerTest {
         EntityResurrectEvent resurrection = new EntityResurrectEvent(mob.entity, EquipmentSlot.HAND);
         resurrection.setCancelled(false);
         listener.updateHealthBarOnResurrection(resurrection);
+        assertEquals("Original", mob.name);
         mob.health = 1;
         advance(1);
         assertEquals("ADDDDDDDDD", mob.name);
@@ -563,12 +578,20 @@ class HealthBarListenerTest {
     }
 
     @Test
-    void cancelledAndNoOpEventsDoNotActivateBarsAndTemporaryHealDoesNotStartOne() throws Exception {
+    void onlyPositiveConfirmedDamageCanActivateAndTemporaryHealingCannot() throws Exception {
         Model mob = mob("Original");
-        damage(mob, 0);
-        EntityDamageEvent cancelled = damageEvent(mob, 4);
-        cancelled.setCancelled(true);
-        listener.displayHealthBar(cancelled);
+        for (double amount : new double[]{0, -1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            damage(mob, amount);
+        }
+        config.set("enable_health_bar", false);
+        damage(mob, 1);
+        config.set("enable_health_bar", true);
+        mob.valid = false;
+        damage(mob, 1);
+        mob.valid = true;
+        mob.dead = true;
+        damage(mob, 1);
+        mob.dead = false;
         heal(mob, 2);
         EntityResurrectEvent resurrection = new EntityResurrectEvent(mob.entity, EquipmentSlot.HAND);
         resurrection.setCancelled(true);
@@ -579,6 +602,7 @@ class HealthBarListenerTest {
         advance(2);
         assertTrue(scheduled.isEmpty());
         assertEquals("Original", mob.name);
+        assertFalse(mob.data.has(key("health-bar-activated")));
     }
 
     @Test
@@ -597,14 +621,15 @@ class HealthBarListenerTest {
     }
 
     @Test
-    void pendingRefreshDoesNotReviveAfterShutdownOrInvalidEntity() {
+    void pendingHealingAndCommittedDamageCannotReviveAfterShutdown() {
         Model mob = mob("Original");
         damage(mob, 1);
+        heal(mob, 2);
         listener.shutdown();
         advance(2);
         assertEquals("Original", mob.name);
         assertFalse(mob.data.has(key("health-name-overridden")));
-        listener.displayHealthBar(damageEvent(mob, 1));
+        damage(mob, 1);
         assertEquals(1, scheduled.size());
     }
 
@@ -613,7 +638,7 @@ class HealthBarListenerTest {
         Model mob = mob("Original");
         damage(mob, 1);
         mob.health = 0;
-        advance(1);
+        advance(FOLLOW_INTERVAL_TICKS);
         assertEquals("DDDDDDDDDD", mob.name);
         listener.clearDisplay(mob.entity, true);
         mob.health = 5;
@@ -652,7 +677,7 @@ class HealthBarListenerTest {
     }
 
     @Test
-    void missingMaximumAndUnloadBeforeFirstRefreshCannotLeaveTrackedBars() {
+    void missingMaximumIsDiagnosedAndInvalidEntitiesCannotActivate() {
         Model mob = mob("Original");
         mob.hasMaximum = false;
         damage(mob, 1);
@@ -661,8 +686,8 @@ class HealthBarListenerTest {
         assertTrue(scheduled.getFirst()
                             .isCancelled());
         mob.hasMaximum = true;
-        damage(mob, 1);
         mob.valid = false;
+        damage(mob, 1);
         advance(1);
         assertTrue(scheduled.getLast()
                             .isCancelled());
@@ -681,12 +706,8 @@ class HealthBarListenerTest {
         return fixture.mob(name);
     }
 
-    private void damage(Model model, double amount) {
-        listener.displayHealthBar(damageEvent(model, amount));
-    }
-
-    private EntityDamageEvent damageEvent(Model model, double amount) {
-        return new EntityDamageEvent(model.entity, EntityDamageEvent.DamageCause.CUSTOM, fixture.damageSource, amount);
+    private void damage(Model model, double appliedDamage) {
+        listener.showCommittedDamage(model.entity, appliedDamage);
     }
 
     private void heal(Model model, double amount) {

@@ -14,8 +14,12 @@ public class AttackerVictimPair {
     private final UUID victimId;
 
     public AttackerVictimPair(Entity attacker, Entity victim) {
-        this.attackerId = attacker != null ? attacker.getUniqueId() : null;
-        this.victimId = victim.getUniqueId();
+        this(attacker != null ? attacker.getUniqueId() : null, victim.getUniqueId());
+    }
+
+    public AttackerVictimPair(UUID attackerId, UUID victimId) {
+        this.attackerId = attackerId;
+        this.victimId = Objects.requireNonNull(victimId);
     }
 
     public boolean involves(UUID entityId) {
