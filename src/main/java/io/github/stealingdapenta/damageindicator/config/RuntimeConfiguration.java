@@ -15,6 +15,13 @@ import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+/**
+ * Caches validated configuration values for {@link ConfigKeys} between loads and reloads.
+ * {@link #load(JavaPlugin, FileConfiguration)} resolves canonical and legacy keys, validates types, numeric ranges, colors and text, and checks complete rendered health bars, logging diagnostics and substituting defaults for invalid settings.
+ * {@link ConfigurationFileManager} prepares the immutable value map before publishing it through {@link ConfigKeys#install(RuntimeConfiguration)}.
+ * Plugin and source references identify the owning plugin and configuration so accessors do not reuse another configuration's values.
+ * This class never writes to disk; warning-deduplication state remains mutable.
+ */
 final class RuntimeConfiguration {
 
     private static final Pattern RGB = Pattern.compile("&\\(\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*\\)");
