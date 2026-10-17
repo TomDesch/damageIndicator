@@ -17,8 +17,8 @@ Set `JAVA_HOME` to your JDK 27 installation. Verify Maven's Java version, then b
 .\mvnw.cmd -B -ntp clean verify
 ```
 
-Deploy `target\damageindicator-2.1.0.jar` while the server is stopped, never
-`original-damageindicator-2.1.0.jar`. Adventure is shaded/relocated; the same
+Deploy `target\damageindicator-3.0.0.jar` while the server is stopped, never
+`original-damageindicator-3.0.0.jar`. Adventure is shaded/relocated; the same
 packaged JAR serves both platforms.
 
 ## Behaviour and configuration

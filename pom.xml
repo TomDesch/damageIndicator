@@ -6,7 +6,7 @@
 
   <groupId>io.github.stealingdapenta</groupId>
   <artifactId>damageindicator</artifactId>
-  <version>2.1.0</version>
+  <version>3.0.0</version>
   <name>DamageIndicator</name>
   <description>Minecraft Damage Indicator.</description>
   <url>https://github.com/TomDesch/damageIndicator</url>
