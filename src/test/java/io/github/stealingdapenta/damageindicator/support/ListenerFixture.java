@@ -57,6 +57,8 @@ public final class ListenerFixture implements AutoCloseable {
     };
     public Consumer<Entity> onTeleport = entity -> {
     };
+    public Consumer<ArmorStand> onSpawn = entity -> {
+    };
     private MockedStatic<Bukkit> bukkit;
     private MockedStatic<DamageIndicator> singleton;
 
@@ -89,6 +91,7 @@ public final class ListenerFixture implements AutoCloseable {
             stands.add(stand);
             Consumer<ArmorStand> configure = call.getArgument(2);
             configure.accept((ArmorStand) stand.entity);
+            onSpawn.accept((ArmorStand) stand.entity);
             if (cancelSpawns) {
                 stand.valid = false;
                 loaded.remove(stand.id);

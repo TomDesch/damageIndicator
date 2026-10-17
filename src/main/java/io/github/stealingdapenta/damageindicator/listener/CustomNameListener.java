@@ -9,11 +9,10 @@ import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.SequencedSet;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
@@ -45,9 +44,11 @@ public class CustomNameListener implements Listener {
     private static final long HEARTBEAT_PERIOD_TICKS = 1;
     private static final long FIRST_DISCOVERY_TICK = 1;
     private final Map<UUID, NameDisplay> activeNames = new HashMap<>();
-    private final Set<UUID> candidates = new LinkedHashSet<>();
+    private final SequencedSet<UUID> candidates = new LinkedHashSet<>();
     private BukkitTask heartbeat;
     private long currentTick;
+    private long lifecycleGeneration;
+    private boolean stopped;
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntitySpawn(EntitySpawnEvent event) {
@@ -124,7 +125,13 @@ public class CustomNameListener implements Listener {
             return;
         }
 
+        long generation = lifecycleGeneration;
         ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
+        // Do not publish a spawn whose synchronous handlers already replaced its owner.
+        if (!canPublishName(entity, generation)) {
+            HOLOGRAPH_UTIL.remove(stand);
+            return;
+        }
         if (!stand.isValid()) {
             candidates.remove(id);
             return;
@@ -135,6 +142,11 @@ public class CustomNameListener implements Listener {
         activeNames.put(id, new NameDisplay(stand, name));
         HOLOGRAPH_UTIL.onCleanup(stand, () -> clearNameOwner(id));
         startHeartbeat();
+    }
+
+    private boolean canPublishName(LivingEntity entity, long generation) {
+        UUID id = entity.getUniqueId();
+        return generation == lifecycleGeneration && candidates.contains(id) && !activeNames.containsKey(id) && entity.isValid() && isEligible(entity) && isEnabled();
     }
 
     private void clearNameOwner(UUID id) {
@@ -207,13 +219,16 @@ public class CustomNameListener implements Listener {
      * Rotate a bounded batch so late naming never requires a per-tick world scan.
      */
     private void discoverNames() {
-        ArrayList<UUID> batch = new ArrayList<>(Math.min(candidates.size(), DISCOVERY_BATCH_SIZE));
-        Iterator<UUID> iterator = candidates.iterator();
-        while (iterator.hasNext() && batch.size() < DISCOVERY_BATCH_SIZE) {
-            batch.add(iterator.next());
-            iterator.remove();
+        long generation = lifecycleGeneration;
+        int batchSize = Math.min(candidates.size(), DISCOVERY_BATCH_SIZE);
+        ArrayList<UUID> batch = new ArrayList<>(batchSize);
+        for (int index = 0; index < batchSize; index++) {
+            batch.add(candidates.removeFirst());
         }
         for (UUID id : batch) {
+            if (generation != lifecycleGeneration) {
+                return;
+            }
             Entity loaded = Bukkit.getEntity(id);
             if (loaded instanceof LivingEntity entity && entity.isValid() && isEligible(entity)) {
                 candidates.add(id);
@@ -267,7 +282,7 @@ public class CustomNameListener implements Listener {
     }
 
     private boolean isEnabled() {
-        return ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean() && ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
+        return !stopped && ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean() && ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
     }
 
     /**
@@ -285,6 +300,8 @@ public class CustomNameListener implements Listener {
     }
 
     public void shutdown() {
+        lifecycleGeneration++;
+        stopped = true;
         stopHeartbeat();
         for (UUID id : new ArrayList<>(activeNames.keySet())) {
             Entity loaded = Bukkit.getEntity(id);
@@ -304,6 +321,7 @@ public class CustomNameListener implements Listener {
     }
 
     public void refreshLoadedEntities() {
+        stopped = false;
         Bukkit.getWorlds()
               .forEach(world -> world.getLivingEntities()
                                      .forEach(this::recoverAndReplaceCustomName));

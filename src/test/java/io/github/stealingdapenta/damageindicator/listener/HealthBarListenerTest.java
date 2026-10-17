@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
@@ -143,6 +144,63 @@ class HealthBarListenerTest {
         assertEquals(0, registeredCleanupCount());
         assertTrue(scheduled.getLast()
                             .isCancelled());
+    }
+
+    @Test
+    void shutdownDuringHologramSpawnDoesNotPublishAnOrphan() throws Exception {
+        holograms();
+        Model mob = mob("Original");
+        fixture.onSpawn = stand -> listener.shutdown();
+
+        damage(mob, 1);
+
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertEquals(0, registeredCleanupCount());
+        assertTrue(fixture.clock.allCancelled());
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void reloadDuringHologramSpawnKeepsOnlyTheRecoveredOwner() throws Exception {
+        holograms();
+        alwaysVisible();
+        Model mob = mob("Original");
+        AtomicBoolean reloaded = new AtomicBoolean();
+        fixture.onSpawn = stand -> {
+            if (reloaded.compareAndSet(false, true)) {
+                listener.shutdown();
+                HolographUtil.HOLOGRAPH_UTIL.clearTracking();
+                listener.refreshPersistedHolograms();
+            }
+        };
+
+        damage(mob, 1);
+
+        assertEquals(1, stands.stream()
+                              .filter(stand -> stand.valid)
+                              .count());
+        assertEquals(1, registeredCleanupCount());
+        listener.shutdown();
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertEquals(0, registeredCleanupCount());
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void cleanupDuringHologramSpawnDoesNotReattachTheDetachedBar() throws Exception {
+        holograms();
+        Model mob = mob("Original");
+        fixture.onSpawn = stand -> listener.clearDisplay(mob.entity, true);
+
+        damage(mob, 1);
+        advance(FOLLOW_INTERVAL_TICKS);
+
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertEquals(0, registeredCleanupCount());
+        assertFalse(mob.data.has(key("health-bar-activated")));
     }
 
     @Test

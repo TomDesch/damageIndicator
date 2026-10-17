@@ -23,6 +23,7 @@ import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -45,6 +46,7 @@ class CustomNameListenerTest {
 
     private static final int FOLLOW_INTERVAL_TICKS = 3;
     private static final int DISCOVERY_INTERVAL_TICKS = 20;
+    private static final int DISCOVERY_BATCH_SIZE = 128;
 
     private final ListenerFixture fixture = new ListenerFixture();
     private final Map<UUID, Entity> loaded = fixture.loaded;
@@ -114,6 +116,28 @@ class CustomNameListenerTest {
         assertEquals(1, stands.size());
         assertEquals("Assigned later", stands.getFirst().name);
         assertFalse(mob.visible);
+    }
+
+    @Test
+    void discoveryHonoursItsBudgetWithoutStarvingLaterCandidates() {
+        for (int index = 0; index < DISCOVERY_BATCH_SIZE; index++) {
+            Model unnamed = mob(null, false);
+            listener.onEntitySpawn(new EntitySpawnEvent(unnamed.entity));
+        }
+        Model last = mob("Last queued name", true);
+        listener.onEntitySpawn(new EntitySpawnEvent(last.entity));
+
+        advance(1);
+        assertTrue(stands.isEmpty());
+        assertTrue(last.visible);
+
+        advance(DISCOVERY_INTERVAL_TICKS);
+        assertEquals(1, stands.size());
+        assertEquals("Last queued name", stands.getFirst().name);
+        assertFalse(last.visible);
+
+        advance(DISCOVERY_INTERVAL_TICKS);
+        assertEquals(1, stands.size());
     }
 
     @Test
@@ -192,6 +216,95 @@ class CustomNameListenerTest {
         assertEquals(2, stands.size());
         assertFalse(first.data.has(key("custom-name-hidden")));
         assertFalse(second.data.has(key("custom-name-hidden")));
+    }
+
+    @Test
+    void shutdownDuringHologramSpawnDoesNotHideTheNativeName() {
+        Model mob = mob("Original", true);
+        fixture.onSpawn = stand -> listener.shutdown();
+
+        listener.replaceWithHologramIfNeeded(mob.entity);
+
+        assertTrue(mob.visible);
+        assertFalse(mob.data.has(key("custom-name-hidden")));
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertTrue(fixture.clock.allCancelled());
+    }
+
+    @Test
+    void reloadDuringHologramSpawnKeepsOnlyTheRecoveredOwner() {
+        Model mob = mob("Original", true);
+        AtomicBoolean reloaded = new AtomicBoolean();
+        fixture.onSpawn = stand -> {
+            if (reloaded.compareAndSet(false, true)) {
+                listener.shutdown();
+                HolographUtil.HOLOGRAPH_UTIL.clearTracking();
+                listener.refreshLoadedEntities();
+            }
+        };
+
+        listener.replaceWithHologramIfNeeded(mob.entity);
+
+        assertEquals(1, stands.stream()
+                              .filter(stand -> stand.valid)
+                              .count());
+        assertFalse(mob.visible);
+        assertTrue(mob.data.has(key("custom-name-hidden")));
+        listener.shutdown();
+        assertTrue(mob.visible);
+        assertFalse(mob.data.has(key("custom-name-hidden")));
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertTrue(fixture.clock.allCancelled());
+    }
+
+    @Test
+    void cleanupDuringHologramSpawnDoesNotHideTheDetachedName() {
+        Model mob = mob("Original", true);
+        fixture.onSpawn = stand -> listener.clearDisplay(mob.entity);
+
+        listener.replaceWithHologramIfNeeded(mob.entity);
+        advance(DISCOVERY_INTERVAL_TICKS);
+
+        assertTrue(mob.visible);
+        assertFalse(mob.data.has(key("custom-name-hidden")));
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertTrue(fixture.clock.allCancelled());
+    }
+
+    @Test
+    void shutdownDuringDiscoveryStopsTheRestOfTheBatch() {
+        Model first = mob("First", true);
+        Model second = mob("Second", true);
+        listener.onEntitySpawn(new EntitySpawnEvent(first.entity));
+        listener.onEntitySpawn(new EntitySpawnEvent(second.entity));
+        fixture.onSpawn = stand -> listener.shutdown();
+
+        advance(DISCOVERY_INTERVAL_TICKS);
+
+        assertEquals(1, stands.size());
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertTrue(first.visible);
+        assertTrue(second.visible);
+        assertTrue(fixture.clock.allCancelled());
+    }
+
+    @Test
+    void shutdownDuringLoadedEntityRefreshDoesNotCreateAnotherDisplay() {
+        Model first = mob("First", true);
+        Model second = mob("Second", true);
+        fixture.onSpawn = stand -> listener.shutdown();
+
+        listener.refreshLoadedEntities();
+
+        assertEquals(1, stands.size());
+        assertTrue(stands.stream().noneMatch(stand -> stand.valid));
+        assertTrue(first.visible);
+        assertTrue(second.visible);
+        assertTrue(fixture.clock.allCancelled());
     }
 
     @Test

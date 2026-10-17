@@ -66,6 +66,7 @@ public class HealthBarListener implements Listener {
     private final Set<UUID> pendingRecoveries = new HashSet<>();
     private BukkitTask heartbeat;
     private long currentTick;
+    private long lifecycleGeneration;
     private boolean stopped;
 
     private static NamespacedKey key(String value) {
@@ -237,8 +238,15 @@ public class HealthBarListener implements Listener {
     }
 
     private void createHologram(LivingEntity entity, ActiveBar bar, String name) {
+        long generation = lifecycleGeneration;
         ArmorStand created = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
-        if (!created.isValid()) {
+        // Spawn handlers can reload or detach this owner before World.spawn returns.
+        if (generation != lifecycleGeneration || activeBars.get(entity.getUniqueId()) != bar) {
+            HOLOGRAPH_UTIL.remove(created);
+            return;
+        }
+        if (!created.isValid() || !canDisplay(entity)) {
+            HOLOGRAPH_UTIL.remove(created);
             clearDisplay(entity, false);
             return;
         }
@@ -448,6 +456,7 @@ public class HealthBarListener implements Listener {
     }
 
     public void shutdown() {
+        lifecycleGeneration++;
         stopped = true;
         if (heartbeat != null) {
             heartbeat.cancel();
