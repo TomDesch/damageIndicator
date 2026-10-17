@@ -172,7 +172,7 @@ public class DamageIndicatorListener implements Listener {
         if (!isValidHealth(health, victim.getUniqueId()) || generation != shutdownGeneration) {
             return;
         }
-        double damage = Math.min(hit.finalDamage(), Math.max(0, hit.health() - health));
+        double damage = Math.clamp(hit.health() - health, 0, hit.finalDamage());
         if (shuttingDown || !Double.isFinite(damage) || damage <= 0) {
             return;
         }
