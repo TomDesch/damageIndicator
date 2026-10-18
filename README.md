@@ -1,72 +1,90 @@
-# ⚔️ DamageIndicator Plugin
+# DamageIndicator
 
-> Hit a mob in any way — experience the magic.
+Damage numbers, health bars and holographic names for Spigot/Paper 26.2 and 26.3.
+Build with JDK 27; the plugin emits Java 21 bytecode.
+Spigot 26.2/26.3 requires Java 25-26 and currently rejects Java 27.
+Paper also supports Java 27; Minecraft's minimum is Java 25.
 
-![SpigotMC](https://img.shields.io/badge/Spigot-1.21-blue?style=flat-square)
-![Java](https://img.shields.io/badge/Java-21-brightgreen?style=flat-square)
-![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH
+MOJANG OR MICROSOFT.
 
----
+## Build
 
-## ✨ What is DamageIndicator?
+Set `JAVA_HOME` to your JDK 27 installation. Verify Maven's Java version, then build:
 
-**DamageIndicator** is a lightweight, eye-candy plugin that adds floating damage numbers and stylish health bars to mobs and entities. Whether you're swinging a
-sword or launching a fireball, you'll see the results — instantly and beautifully.
+```powershell
+.\mvnw.cmd -version
+.\mvnw.cmd -B -ntp clean verify
+```
 
----
+Deploy `target\damageindicator-3.0.0.jar` while the server is stopped, never
+`original-damageindicator-3.0.0.jar`. Adventure is shaded/relocated; the same
+packaged JAR serves both platforms.
 
-## 🛠️ Features
+## Behaviour and configuration
 
-- ✅ Floating **damage numbers** on hit
-- ✅ Dynamic **health bars** above mobs
-- ✅ Option for **holographic armor stands** or inline names
-- ✅ Color-coded by **damage type**
-- ✅ Fully **configurable** via `config.yml`
-- ✅ Includes cleanup tools and performance options
+Edit `plugins\DamageIndicator\config.yml`, then `/damageindicator:reload`.
+Never use the server-wide `/reload`.
 
----
+| `enable_health_bar` | `enable_hologram_health_bar` | `enable_holographic_custom_names` | Result |
+|---|---|---|---|
+| false | false | false/true | Neither; dependency warning if names enabled |
+| false | true | false | Neither |
+| false | true | true | Name holograms only |
+| true | false | false/true | Inline bars; name holograms inactive |
+| true | true | false | Holographic bars |
+| true | true | true | Both holographic displays |
 
-## 📸 Preview
+`enable_damage_indicator` is independent. `enable_damage_merge` groups hits by
+attacker/victim UUID, resolving projectile shooters; environmental hits stay
+separate. Native numbers reconcile committed HP by the next server tick;
+lethal numbers finish their animation.
 
-*(TODO: Add a cool GIF or screenshot here — hit particles, numbers, health bars, etc.)*
+Always-visible bars activate on damage/healing, not on untouched mobs, and
+recover after unload/reload/restart. Temporary bars expire independently of
+follow speed. Health updates use committed next-tick HP, including healing/totems.
+Players support holographic bars only; inline mode leaves player names untouched.
 
----
+Inline overlays preserve later name-tag/plugin changes. Legacy records restore
+their saved original once. Name holograms replace visible custom names only,
+excluding players, armour stands and NPCs; discovery checks 128 candidates/second.
 
-## 📦 Installation
+| Setting | Range |
+|---|---|
+| Bar length / duration | 1-100 symbols / 1-10 seconds |
+| Follow interval / jump duration | 1-200 ticks |
+| Merge timeout | 0-60 seconds |
+| Hologram offsets | -64 to 64 blocks |
+| Vertical velocity / gravity | -10 to 10 / 0-10 |
 
-1. Place the plugin `.jar` in your server's `/plugins` folder.
-2. Start the server to generate the default config.
-3. Edit `plugins/DamageIndicator/config.yml` as needed.
-4. Reload the plugin using `/reload` or `/config`.
+Values must be finite. Invalid values use diagnosed defaults; malformed YAML
+preserves the live configuration and file. Canonical keys override legacy keys.
+Existing files are not rewritten on load/reload; defaults and migration apply
+in memory. Reload applies disk contents and discards unsaved `getConfig()` edits.
+Prefix/suffix limits are 256 characters each, symbols 32; combined serialized bar
+text must fit Spigot's 256-character limit or default appearance is used.
 
----
+Text: `&(R,G,B)` (channels 0-255), `&b` bold, `&s` strikethrough, `&u` underline,
+`&i` italic, `&o` obfuscated, `&r` reset. Styled symbols repeat as whole components.
 
-## ⚙️ Commands & Permissions
+| Command | Permission | Scope |
+|---|---|---|
+| `/damageindicator:reload` | `damageindicator.reload` | Validated configuration reload |
+| `/damageindicator:arearemove` | `damageindicator.arearemove` | Owned holograms and tracking |
+| `/damageindicator:arearename` | `damageindicator.arearename` | All nearby custom names, including unrelated entities |
 
-| Command       | Description                                  | Permission                   |
-|---------------|----------------------------------------------|------------------------------|
-| `/reload`     | Reloads the config without rebooting         | `damageindicator.reload`     |
-| `/arearemove` | Removes nearby holographic entities (plugin) | `damageindicator.arearemove` |
+Permissions default to op; cleanup is player-only, within a 50-block-per-axis box.
+`arearename` is deliberately destructive. Reload aliases `config`, `load`,
+`restart` remain available.
 
----
+`displayVirtualDamage(victim, attacker, damage, cause)` requires the server thread
+and an enabled plugin. It displays already-applied damage without changing HP or
+firing native events; do not also display the same native hit.
 
-You control **everything** — from bar length, symbols, and colors to how fast holograms follow.
+[Source](https://github.com/TomDesch/damageIndicator) |
+[Spigot resource](https://www.spigotmc.org/resources/damage-indicator-healthbar.113612/)
 
-📖 Full config reference: [`config.yml`](./src/main/resources/config.yml)
+License: MIT.
 
----
-
-### ❤️ Support the Project
-
-If you enjoy using **DamageIndicator**, consider:
-
-- ⭐ Starring the [GitHub repo](https://github.com/stealingdapenta/damageindicator)
-- 🗣️ Sharing it with your server community
-- 💬 Joining the [**official Discord**](https://discord.gg/Hv4S43qUuG) for help, feature requests, and development updates!
-- 🌐 [SpigotMC Resource](https://www.spigotmc.org/resources/damage-indicator-healthbar.113612/)
-
----
-
-## 📜 License
-
-This plugin is open-source and MIT-licensed. Do what you want — just don't claim it as your own. 😄
+Bundled library licenses and attributions are included in the JAR.
+The plugin has no telemetry or external network requests.

@@ -1,6 +1,9 @@
 HELP.md
+/.playtest/
+/PLAYTEST.md
+/FEATURE_IDEAS.html
+/playtest-checklist.html
 target/
-!.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 

@@ -4,22 +4,144 @@ import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLO
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture;
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture.Model;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.bukkit.World;
 
 class HolographUtilTest {
+
+    @AfterEach
+    void clearOwnership() {
+        HOLOGRAPH_UTIL.clearTracking();
+    }
+
+    @Test
+    void activeOwnershipDoesNotTreatAnInvalidWrapperAsAnActiveHologram() {
+        ArmorStand stand = mock(ArmorStand.class);
+        when(stand.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stand.isValid()).thenReturn(true);
+        HOLOGRAPH_UTIL.track(stand);
+        assertTrue(HOLOGRAPH_UTIL.isActive(stand));
+
+        when(stand.isValid()).thenReturn(false);
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+        HOLOGRAPH_UTIL.forget(stand);
+        when(stand.isValid()).thenReturn(true);
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
+    void removingAHologramAlsoReleasesSameSessionOwnership() {
+        ArmorStand stand = mock(ArmorStand.class);
+        when(stand.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stand.isValid()).thenReturn(true);
+        HOLOGRAPH_UTIL.track(stand);
+
+        HOLOGRAPH_UTIL.remove(stand);
+
+        verify(stand).remove();
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
+    void forgettingUnavailableWrapperByUuidAlsoReleasesItsCleanupCallback() {
+        ArmorStand stand = mock(ArmorStand.class);
+        UUID id = UUID.randomUUID();
+        when(stand.getUniqueId()).thenReturn(id);
+        when(stand.isValid()).thenReturn(true);
+        Runnable cleanup = mock(Runnable.class);
+        HOLOGRAPH_UTIL.track(stand);
+        HOLOGRAPH_UTIL.onCleanup(stand, cleanup);
+
+        HOLOGRAPH_UTIL.forget(id);
+        HOLOGRAPH_UTIL.cleanup(stand);
+
+        verify(cleanup, never()).run();
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
+    void invalidSpawnsCannotRegisterOwnerCallbacks() {
+        ArmorStand invalid = mock(ArmorStand.class);
+        Runnable cleanup = mock(Runnable.class);
+        assertThrows(IllegalArgumentException.class, () -> HOLOGRAPH_UTIL.onCleanup(invalid, cleanup));
+        verify(cleanup, never()).run();
+    }
+
+    @Test
+    void administrativeCleanupDetachesTrackingBeforeRemovingTheEntity() {
+        ArmorStand stand = mock(ArmorStand.class);
+        when(stand.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stand.isValid()).thenReturn(true);
+        Runnable cleanup = mock(Runnable.class);
+        HOLOGRAPH_UTIL.track(stand);
+        HOLOGRAPH_UTIL.onCleanup(stand, cleanup);
+
+        HOLOGRAPH_UTIL.cleanup(stand);
+        HOLOGRAPH_UTIL.cleanup(stand);
+
+        verify(cleanup).run();
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
+    void removalEventDetachesOwnershipWithoutRemovingTheEntityRecursively() {
+        ArmorStand stand = mock(ArmorStand.class);
+        when(stand.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(stand.isValid()).thenReturn(true);
+        HOLOGRAPH_UTIL.track(stand);
+        HOLOGRAPH_UTIL.onCleanup(stand, () -> HOLOGRAPH_UTIL.remove(stand));
+
+        HOLOGRAPH_UTIL.removed(stand);
+
+        verify(stand, never()).remove();
+        assertFalse(HOLOGRAPH_UTIL.isActive(stand));
+    }
+
+    @Test
+    void unchangedHologramsDoNotTeleportButMovementStillFollows() {
+        ArmorStand stand = mock(ArmorStand.class);
+        World world = mock(World.class);
+        Location start = new Location(world, 1, 2, 3);
+        when(stand.getLocation()).thenReturn(start);
+        when(stand.teleport(any(Location.class))).thenReturn(true);
+
+        assertTrue(HOLOGRAPH_UTIL.teleportIfMoved(stand, start.clone()));
+        verify(stand, never()).teleport(any(Location.class));
+        Location moved = start.clone()
+                              .add(1, 0, 0);
+        assertTrue(HOLOGRAPH_UTIL.teleportIfMoved(stand, moved));
+        verify(stand).teleport(moved);
+    }
+
+    @Test
+    void createdHologramsAreTransientAndRegisteredAfterSpawning() {
+        try (ListenerFixture fixture = new ListenerFixture()) {
+            fixture.open();
+            ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(new Location(fixture.world, 0, 0, 0), Component.text("Name"));
+
+            assertEquals("Name", stand.getCustomName());
+            verify(stand).setPersistent(false);
+            assertTrue(HOLOGRAPH_UTIL.isActive(stand));
+        }
+    }
 
     @Test
     void locationAboveEntity_entity_returnsLocation() {
@@ -37,50 +159,20 @@ class HolographUtilTest {
 
     @Test
     void cancelHologramFor_livingEntityAndData_success() {
-        LivingEntity livingEntity = mock(LivingEntity.class);
-        Map<LivingEntity, LivingEntityTaskInfo> data = new HashMap<>();
+        try (ListenerFixture fixture = new ListenerFixture()) {
+            fixture.open();
+            LivingEntity livingEntity = fixture.mob(null).entity;
+            Model stand = fixture.entity(ArmorStand.class, null);
+            var task = fixture.clock.scheduler.runTaskTimer(fixture.plugin, () -> {
+            }, 1, 1);
+            Map<LivingEntity, LivingEntityTaskInfo> data = new HashMap<>();
+            data.put(livingEntity, new LivingEntityTaskInfo(task, (ArmorStand) stand.entity));
 
-        BukkitTaskStub taskStub = new BukkitTaskStub();
-        ArmorStand armorStand = mock(ArmorStand.class);
-        LivingEntityTaskInfo taskInfo = new LivingEntityTaskInfo(taskStub, armorStand);
-        data.put(livingEntity, taskInfo);
-        when(taskInfo.armorStand()
-                     .isValid()).thenReturn(true);
+            HOLOGRAPH_UTIL.cancelHologramFor(livingEntity, data);
 
-        HOLOGRAPH_UTIL.cancelHologramFor(livingEntity, data);
-
-        assertTrue(taskStub.isCancelled());
-        verify(armorStand).remove();
-
-        assertFalse(data.containsKey(livingEntity));
-    }
-
-    private static class BukkitTaskStub implements BukkitTask {
-
-        private boolean cancelled = false;
-
-        @Override
-        public synchronized void cancel() throws IllegalStateException {
-            this.cancelled = true;
-        }
-
-        @Override
-        public int getTaskId() {
-            return 0;
-        }
-
-        @Override
-        public @NotNull Plugin getOwner() {
-            return mock(Plugin.class);
-        }
-
-        @Override
-        public boolean isSync() {
-            return false;
-        }
-
-        public boolean isCancelled() {
-            return cancelled;
+            assertTrue(task.isCancelled());
+            assertFalse(stand.valid);
+            assertFalse(data.containsKey(livingEntity));
         }
     }
 }

@@ -1,12 +1,12 @@
 name: DamageIndicator
-version: 2.1.0
+version: 3.0.0
 main: io.github.stealingdapenta.damageindicator.DamageIndicator
 author: StealingDaPenta
-api-version: 1.21
+website: https://github.com/TomDesch/damageIndicator
+api-version: '26.2'
 
 description: >
-  The best Damage Indicator in the game! 
-  Features floating damage numbers, health bars, holograms, and full customization.
+  Floating damage numbers, activation-based health bars, and custom-name holograms.
 
 # === Commands ===
 commands:

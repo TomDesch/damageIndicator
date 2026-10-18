@@ -1,10 +1,13 @@
 package io.github.stealingdapenta.damageindicator.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Set;
 import java.util.UUID;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -12,6 +15,41 @@ import org.bukkit.entity.Zombie;
 import org.junit.jupiter.api.Test;
 
 class AttackerVictimPairTest {
+
+    @Test
+    void uuidConstructorMatchesEntityConstructorWithoutRetainingWrappers() {
+        Entity attacker = mock(Entity.class);
+        Entity victim = mock(Entity.class);
+        UUID attackerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+
+        AttackerVictimPair captured = new AttackerVictimPair(attackerId, victimId);
+        AttackerVictimPair wrapped = new AttackerVictimPair(attacker, victim);
+
+        assertEquals(wrapped, captured);
+        assertEquals(wrapped.hashCode(), captured.hashCode());
+        assertTrue(captured.involvesAny(Set.of(attackerId)));
+        assertTrue(captured.involves(victimId));
+        assertEquals(new AttackerVictimPair(null, victim), new AttackerVictimPair((UUID) null, victimId));
+    }
+
+    @Test
+    void batchCleanupMatchesEitherIdentityAndSupportsNoAttacker() {
+        Entity attacker = mock(Entity.class);
+        Entity victim = mock(Entity.class);
+        UUID attackerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+        AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
+
+        assertTrue(pair.involvesAny(Set.of(attackerId)));
+        assertTrue(pair.involvesAny(Set.of(victimId)));
+        assertFalse(pair.involvesAny(Set.of(UUID.randomUUID())));
+        assertFalse(new AttackerVictimPair(null, victim).involvesAny(Set.of(UUID.randomUUID())));
+    }
 
     @Test
     void testEquals_SameAttackerAndVictim_ReturnsTrue() {
@@ -131,5 +169,20 @@ class AttackerVictimPairTest {
         // Hash codes should be different (not guaranteed by contract, but highly likely)
         assertNotEquals(pair1.hashCode(), pair2.hashCode());
     }
-}
 
+    @Test
+    void involves_MatchesAttackerAndVictimOnly() {
+        UUID attackerId = UUID.randomUUID();
+        UUID victimId = UUID.randomUUID();
+        Entity attacker = mock(Player.class);
+        Entity victim = mock(Zombie.class);
+        when(attacker.getUniqueId()).thenReturn(attackerId);
+        when(victim.getUniqueId()).thenReturn(victimId);
+
+        AttackerVictimPair pair = new AttackerVictimPair(attacker, victim);
+
+        assertTrue(pair.involves(attackerId));
+        assertTrue(pair.involves(victimId));
+        assertFalse(pair.involves(UUID.randomUUID()));
+    }
+}

@@ -1,15 +1,16 @@
 package io.github.stealingdapenta.damageindicator.command;
 
-import static io.github.stealingdapenta.damageindicator.listener.DamageIndicatorListener.getCustomNamespacedKey;
+import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.config.Permission;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
 public class AreaRemoveCommand implements CommandExecutor {
@@ -27,20 +28,19 @@ public class AreaRemoveCommand implements CommandExecutor {
         }
 
         if (!player.hasPermission(Permission.AREA_REMOVE.getNode())) {
-            player.sendMessage(Component.text(NO_PERMISSION_MSG.formatted(Permission.AREA_REMOVE.getNode())));
+            player.sendMessage(TEXT_UTIL.serializeComponent(Component.text(NO_PERMISSION_MSG.formatted(Permission.AREA_REMOVE.getNode()))));
             return true;
         }
 
         int removedCount = 0;
         for (Entity entity : player.getNearbyEntities(RADIUS, RADIUS, RADIUS)) {
-            if (Boolean.TRUE.equals(entity.getPersistentDataContainer()
-                                          .getOrDefault(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, false))) {
-                entity.remove();
+            if (entity instanceof ArmorStand stand && stand.isValid() && HOLOGRAPH_UTIL.isTaggedHologram(stand)) {
+                HOLOGRAPH_UTIL.cleanup(stand);
                 removedCount++;
             }
         }
 
-        player.sendMessage(Component.text(REMOVED_MSG.formatted(removedCount)));
+        player.sendMessage(TEXT_UTIL.serializeComponent(Component.text(REMOVED_MSG.formatted(removedCount))));
         return true;
     }
 }

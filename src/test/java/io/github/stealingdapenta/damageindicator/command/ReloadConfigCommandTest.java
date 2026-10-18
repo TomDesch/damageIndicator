@@ -4,13 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import net.kyori.adventure.text.Component;
+import io.github.stealingdapenta.damageindicator.config.ConfigurationLoadException;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +21,21 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 class ReloadConfigCommandTest {
+
+    @Test
+    void invalidConfigurationReportsFailureInsteadOfSuccess() {
+        when(mockCommandSender.hasPermission("damageindicator.reload")).thenReturn(true);
+        DamageIndicator plugin = mock(DamageIndicator.class);
+        doThrow(new ConfigurationLoadException("Invalid YAML", new IllegalArgumentException())).when(plugin)
+                                                                                               .reloadConfiguration();
+        try (MockedStatic<DamageIndicator> singleton = mockStatic(DamageIndicator.class)) {
+            singleton.when(DamageIndicator::getInstance)
+                     .thenReturn(plugin);
+            assertTrue(reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[0]));
+        }
+        verify(mockCommandSender).sendMessage("Configuration reload failed; the previous configuration is still active. Check the server log.");
+        verify(mockCommandSender, never()).sendMessage("Successfully reloaded the DamageIndicator configuration file.");
+    }
 
     private static final String LABEL = "label";
     private ReloadConfigCommand reloadConfigCommand;
@@ -38,13 +55,13 @@ class ReloadConfigCommandTest {
         when(mockCommandSender.hasPermission(anyString())).thenReturn(false);
         String expectedMessage = "You don't have the required damageindicator.reload to execute this command.";
 
-        ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
         boolean result = reloadConfigCommand.onCommand(mockCommandSender, mockCommand, LABEL, new String[]{});
 
         assertTrue(result);
         verify(mockCommandSender, times(1)).sendMessage(captor.capture());
-        assertEquals(Component.text(expectedMessage), captor.getValue());
+        assertEquals(expectedMessage, captor.getValue());
     }
 
 
@@ -63,9 +80,10 @@ class ReloadConfigCommandTest {
 
             assertTrue(result);
 
-            ArgumentCaptor<Component> captor = ArgumentCaptor.forClass(Component.class);
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            verify(mockPlugin).reloadConfiguration();
             verify(mockCommandSender, times(1)).sendMessage(captor.capture());
-            assertEquals(Component.text(expectedMessage), captor.getValue());
+            assertEquals(expectedMessage, captor.getValue());
         }
     }
 

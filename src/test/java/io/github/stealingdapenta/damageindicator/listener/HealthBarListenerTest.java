@@ -1,0 +1,879 @@
+package io.github.stealingdapenta.damageindicator.listener;
+
+import static io.github.stealingdapenta.damageindicator.support.ListenerFixture.key;
+import static org.bukkit.persistence.PersistentDataType.BOOLEAN;
+import static org.bukkit.persistence.PersistentDataType.STRING;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture;
+import io.github.stealingdapenta.damageindicator.support.ListenerFixture.Model;
+import io.github.stealingdapenta.damageindicator.support.TickScheduler.Task;
+import io.github.stealingdapenta.damageindicator.utils.HolographUtil;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+import org.bukkit.Chunk;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
+import org.bukkit.World;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.damage.DamageType;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.entity.EntityResurrectEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.plugin.RegisteredListener;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+class HealthBarListenerTest {
+
+    private static final int BAR_LENGTH = 10;
+    private static final int FOLLOW_INTERVAL_TICKS = 3;
+    private static final int CANONICAL_NAME_LIMIT = 256;
+
+    private final ListenerFixture fixture = new ListenerFixture();
+    private final Map<UUID, Entity> loaded = fixture.loaded;
+    private final List<Model> stands = fixture.stands;
+    private final List<Task> scheduled = fixture.clock.tasks;
+    private final YamlConfiguration config = fixture.config;
+    private HealthBarListener listener;
+    private final World world = fixture.world;
+    private final Logger logger = fixture.logger;
+
+    @BeforeEach
+    void setUp() {
+        fixture.open();
+        config.set("enable_health_bar", true);
+        config.set("enable_hologram_health_bar", false);
+        config.set("health_bar_always_visible", false);
+        config.set("health_bar_display_duration", 1);
+        config.set("health_bar_length", BAR_LENGTH);
+        config.set("health_bar_prefix", "");
+        config.set("health_bar_suffix", "");
+        config.set("health_bar_alive_symbol", "A");
+        config.set("health_bar_dead_symbol", "D");
+        config.set("hologram_follow_speed", FOLLOW_INTERVAL_TICKS);
+        listener = new HealthBarListener();
+    }
+
+    @AfterEach
+    void tearDown() {
+        listener.shutdown();
+        HolographUtil.HOLOGRAPH_UTIL.clearTracking();
+        fixture.close();
+    }
+
+    @Test
+    void registriesProvideStableTypedAttributeAndDamageTypeEntries() {
+        assertSame(Attribute.MAX_HEALTH, Registry.ATTRIBUTE.getOrThrow(NamespacedKey.minecraft("max_health")));
+        assertSame(DamageType.GENERIC, Registry.DAMAGE_TYPE.getOrThrow(NamespacedKey.minecraft("generic")));
+        assertEquals(NamespacedKey.minecraft("generic"), DamageType.GENERIC.getKeyOrThrow());
+        assertTrue(DamageType.GENERIC.isRegistered());
+    }
+
+    @Test
+    void cancelledHologramSpawnDoesNotRetryOrRetainCleanupHandlers() throws Exception {
+        holograms();
+        alwaysVisible();
+        fixture.cancelSpawns = true;
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(40);
+
+        assertEquals(1, stands.size());
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        assertEquals("Original", mob.name);
+        assertEquals(0, registeredCleanupCount());
+        damage(mob, 1);
+        advance(40);
+        assertEquals(2, stands.size());
+        assertEquals(0, registeredCleanupCount());
+        listener.clearDisplay(mob.entity, true);
+        listener.shutdown();
+        assertEquals(0, registeredCleanupCount());
+        verify(logger).warning(contains("spawn was cancelled"));
+    }
+
+    @Test
+    void worldUnloadRestoresNamesBeforeSaveAndReleasesHolographicOwnership() throws Exception {
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        listener.onWorldUnload(new WorldUnloadEvent(world));
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+        assertTrue(mob.data.has(key("health-bar-activated")));
+
+        holograms();
+        listener.refreshPersistedHolograms();
+        assertEquals(1, stands.size());
+        listener.onWorldUnload(new WorldUnloadEvent(world));
+        loaded.clear();
+        advance(1);
+        assertFalse(stands.getFirst().valid);
+        assertEquals(0, registeredCleanupCount());
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
+    }
+
+    @Test
+    void shutdownDuringHologramSpawnDoesNotPublishAnOrphan() throws Exception {
+        holograms();
+        Model mob = mob("Original");
+        fixture.onSpawn = stand -> listener.shutdown();
+
+        damage(mob, 1);
+
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertEquals(0, registeredCleanupCount());
+        assertTrue(fixture.clock.allCancelled());
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void reloadDuringHologramSpawnKeepsOnlyTheRecoveredOwner() throws Exception {
+        holograms();
+        alwaysVisible();
+        Model mob = mob("Original");
+        AtomicBoolean reloaded = new AtomicBoolean();
+        fixture.onSpawn = stand -> {
+            if (reloaded.compareAndSet(false, true)) {
+                listener.shutdown();
+                HolographUtil.HOLOGRAPH_UTIL.clearTracking();
+                listener.refreshPersistedHolograms();
+            }
+        };
+
+        damage(mob, 1);
+
+        assertEquals(1, stands.stream()
+                              .filter(stand -> stand.valid)
+                              .count());
+        assertEquals(1, registeredCleanupCount());
+        listener.shutdown();
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertEquals(0, registeredCleanupCount());
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void cleanupDuringHologramSpawnDoesNotReattachTheDetachedBar() throws Exception {
+        holograms();
+        Model mob = mob("Original");
+        fixture.onSpawn = stand -> listener.clearDisplay(mob.entity, true);
+
+        damage(mob, 1);
+        advance(FOLLOW_INTERVAL_TICKS);
+
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertEquals(0, registeredCleanupCount());
+        assertFalse(mob.data.has(key("health-bar-activated")));
+    }
+
+    @Test
+    void unavailableWorldWrappersStillReleaseHologramUuidsAndCallbacks() throws Exception {
+        holograms();
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        assertEquals(1, registeredCleanupCount());
+        loaded.clear();
+
+        advance(1);
+
+        assertEquals(0, registeredCleanupCount());
+        assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stands.getFirst().entity));
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
+    }
+
+    @Test
+    void legacyInlineActivationSurvivesMigrationAndRestartWithoutCapturingTheOldBar() {
+        alwaysVisible();
+        Model mob = mob("Old health bar");
+        mob.visible = true;
+        mob.data.set(key("health-name-overridden"), BOOLEAN, true);
+        mob.data.set(key("health-original-name"), STRING, "Saved name");
+        mob.data.set(key("health-original-visible"), BOOLEAN, false);
+        listener.restorePersistedNames();
+        assertEquals("Saved name", mob.name);
+        listener.refreshPersistedHolograms();
+        assertEquals("AAAAAAAAAA", mob.name);
+        listener.shutdown();
+        assertEquals("Saved name", mob.name);
+        HealthBarListener restarted = new HealthBarListener();
+        restarted.restorePersistedNames();
+        restarted.refreshPersistedHolograms();
+        assertEquals("AAAAAAAAAA", mob.name);
+        restarted.shutdown();
+        assertEquals("Saved name", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    private int registeredCleanupCount() throws Exception {
+        var field = HolographUtil.class.getDeclaredField("cleanupHandlers");
+        field.setAccessible(true);
+        return ((Map<?, ?>) field.get(HolographUtil.HOLOGRAPH_UTIL)).size();
+    }
+
+    @Test
+    void committedDamageUsesCurrentHealthImmediatelyAndSharesOneHeartbeat() {
+        config.set("enable_damage_indicator", false);
+        Model mob = mob("Original");
+        mob.health = 18;
+        damage(mob, 2);
+        assertEquals("AAAAAAAAAD", mob.name);
+        mob.health = 14;
+        damage(mob, 4);
+        assertEquals("AAAAAAADDD", mob.name);
+        assertEquals(1, scheduled.size());
+        mob.health = 8;
+        damage(mob, 6);
+        assertEquals("AAAADDDDDD", mob.name);
+        assertEquals(1, scheduled.size());
+        advance(19);
+        assertEquals("AAAADDDDDD", mob.name);
+        advance(1);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+    }
+
+    @Test
+    void roundedHealthBucketsShareExactStyledTextAcrossDifferentMaximumHealth() {
+        config.set("health_bar_length", 4);
+        config.set("health_bar_prefix", " &(18,52,86)&b[");
+        config.set("health_bar_suffix", "&(7,8,9)&s] ");
+        config.set("health_bar_alive_symbol", "&(1,2,3)&u+&r.");
+        config.set("health_bar_dead_symbol", "&(4,5,6)&i-&r_");
+        String prefix = " \u00a7x\u00a71\u00a72\u00a73\u00a74\u00a75\u00a76\u00a7l[";
+        String alive = "\u00a7x\u00a70\u00a71\u00a70\u00a72\u00a70\u00a73\u00a7n+\u00a7f.";
+        String dead = "\u00a7x\u00a70\u00a74\u00a70\u00a75\u00a70\u00a76\u00a7o-\u00a7f_";
+        String suffix = "\u00a7x\u00a70\u00a77\u00a70\u00a78\u00a70\u00a79\u00a7m] ";
+        Model first = mob("First original");
+        Model second = mob("Second original");
+        first.health = 7.5;
+        second.health = 37.5;
+        second.maximumHealth = 100;
+
+        damage(first, 1);
+        damage(second, 1);
+
+        assertEquals(prefix + alive.repeat(2) + dead.repeat(2) + suffix, first.name);
+        assertSame(first.name, second.name);
+        for (double[] sample : new double[][]{{0, 20, 0}, {0.01, 20, 1}, {7.49, 20, 1}, {7.5, 20, 2}, {37.5, 100, 2}, {100, 20, 4}}) {
+            first.health = sample[0];
+            first.maximumHealth = sample[1];
+            int aliveCount = (int) sample[2];
+            damage(first, 1);
+            assertEquals(prefix + alive.repeat(aliveCount) + dead.repeat(4 - aliveCount) + suffix, first.name);
+            if (aliveCount == 2) {
+                assertSame(second.name, first.name);
+            }
+        }
+    }
+
+    @Test
+    void appearanceChangesInvalidateAllStyledComponentsAndLengthWithoutReplacingConfig() {
+        config.set("health_bar_prefix", "P");
+        config.set("health_bar_suffix", "S");
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 1);
+        String original = "PAAAAADDDDDS";
+        assertEquals(original, mob.name);
+
+        for (String[] change : new String[][]{
+            {"health_bar_prefix", "Q", "QAAAAADDDDDS"},
+            {"health_bar_prefix", " P", " PAAAAADDDDDS"},
+            {"health_bar_prefix", "&bP", "\u00a7lPAAAAADDDDDS"},
+            {"health_bar_suffix", "&uS", "PAAAAADDDDD\u00a7nS"},
+            {"health_bar_alive_symbol", "&bA", "P\u00a7lAAAAA\u00a7rDDDDDS"},
+            {"health_bar_dead_symbol", "&(1,2,3)D", "PAAAAA\u00a7x\u00a70\u00a71\u00a70\u00a72\u00a70\u00a73DDDDD\u00a7rS"},
+            {"health_bar_alive_symbol", "B", "PBBBBBDDDDDS"},
+            {"health_bar_dead_symbol", "X", "PAAAAAXXXXXS"}
+        }) {
+            String previous = config.getString(change[0]);
+            config.set(change[0], change[1]);
+            damage(mob, 1);
+            assertEquals(change[2], mob.name, change[0] + "=" + change[1]);
+            config.set(change[0], previous);
+            damage(mob, 1);
+            assertEquals(original, mob.name);
+        }
+        config.set("health_bar_length", 6);
+        damage(mob, 1);
+        assertEquals("PAAADDDS", mob.name);
+    }
+
+    @Test
+    void sameListenerReloadRendersNewAppearanceAndStillRestoresTheExternalName() {
+        alwaysVisible();
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 1);
+        mob.name = "Name tag";
+        mob.visible = false;
+        advance(FOLLOW_INTERVAL_TICKS);
+        assertEquals("AAAAADDDDD", mob.name);
+        listener.shutdown();
+        assertEquals("Name tag", mob.name);
+
+        config.set("health_bar_prefix", "New ");
+        config.set("health_bar_length", 4);
+        config.set("health_bar_alive_symbol", "X");
+        config.set("health_bar_dead_symbol", "Y");
+        listener.refreshPersistedHolograms();
+
+        assertEquals("New XXYY", mob.name);
+        listener.shutdown();
+        assertEquals("Name tag", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    @Test
+    void externalNamesBecomeTheNewOriginalBeforeRedrawOrReset() {
+        Model mob = mob("Old");
+        damage(mob, 2);
+        advance(1);
+        mob.name = "Name tag";
+        mob.visible = false;
+        advance(3);
+        assertEquals("AAAAAAAAAA", mob.name);
+        listener.clearDisplay(mob.entity, true);
+        assertEquals("Name tag", mob.name);
+        assertFalse(mob.visible);
+        assertFalse(mob.data.has(key("health-bar-activated")));
+
+        damage(mob, 2);
+        advance(1);
+        mob.name = "Other plugin";
+        mob.visible = true;
+        listener.shutdown();
+        assertEquals("Other plugin", mob.name);
+        assertTrue(mob.visible);
+    }
+
+    @Test
+    void changingOnlyVisibilityDoesNotPromoteTheOverlayToAnOriginalName() {
+        Model mob = mob("Original");
+        mob.visible = true;
+        damage(mob, 1);
+        advance(1);
+        mob.visible = false;
+        advance(3);
+        listener.clearDisplay(mob.entity, true);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    @Test
+    void loadedLegacyOverlayRestoresStoredOriginalBeforeOwnershipWasRecorded() {
+        Model mob = mob("Stuck legacy bar");
+        mob.visible = true;
+        mob.data.set(key("health-name-overridden"), BOOLEAN, true);
+        mob.data.set(key("health-original-name"), STRING, "Original");
+        mob.data.set(key("health-original-visible"), BOOLEAN, false);
+        load(mob);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+        assertFalse(mob.data.has(key("health-name-overridden")));
+        assertTrue(scheduled.isEmpty());
+    }
+
+    @Test
+    void firstDamageResolvesLegacyBackupBeforeCapturingANewOriginal() {
+        Model mob = mob("Stuck legacy bar");
+        mob.visible = true;
+        mob.data.set(key("health-name-overridden"), BOOLEAN, true);
+        mob.data.set(key("health-original-name"), STRING, "Original");
+        mob.data.set(key("health-original-visible"), BOOLEAN, false);
+        damage(mob, 1);
+        advance(1);
+        assertEquals("AAAAAAAAAA", mob.name);
+        assertEquals("Original", mob.data.get(key("health-original-name"), STRING));
+        listener.clearDisplay(mob.entity, true);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    @Test
+    void canonicalizedTruncatedMulticolourOverlaysNeverReplaceTheOriginalBackup() {
+        Model mob = mob("original");
+        mob.nameCanonicalizer = value -> value == null || value.isEmpty() ? null : value.substring(0, Math.min(value.length(), CANONICAL_NAME_LIMIT))
+                                                                                        .toLowerCase(Locale.ROOT);
+        config.set("health_bar_prefix", "P".repeat(200));
+        config.set("health_bar_length", 100);
+        config.set("health_bar_alive_symbol", "&(1,2,3)Alive&(4,5,6)More");
+        damage(mob, 1);
+        advance(1);
+        assertEquals(CANONICAL_NAME_LIMIT, mob.name.length());
+        assertEquals(mob.name.toLowerCase(Locale.ROOT), mob.name);
+        assertEquals(mob.name, mob.data.get(key("health-last-overlay"), STRING));
+        advance(3);
+        mob.health = 10;
+        damage(mob, 1);
+        advance(1);
+        assertEquals("original", mob.data.get(key("health-original-name"), STRING));
+        assertEquals(mob.name, mob.data.get(key("health-last-overlay"), STRING));
+        listener.clearDisplay(mob.entity, true);
+        assertEquals("original", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    @Test
+    void emptyOverlayUsesPersistedSentinelAndStillRestoresTheOriginalName() {
+        Model mob = mob("Original");
+        mob.nameCanonicalizer = value -> value == null || value.isEmpty() ? null : value;
+        config.set("health_bar_alive_symbol", "");
+        config.set("health_bar_dead_symbol", "");
+        damage(mob, 1);
+        advance(1);
+        assertNull(mob.name);
+        assertEquals("", mob.data.get(key("health-last-overlay"), STRING));
+        advance(3);
+        damage(mob, 1);
+        advance(1);
+        assertEquals("Original", mob.data.get(key("health-original-name"), STRING));
+        assertEquals("", mob.data.get(key("health-last-overlay"), STRING));
+        listener.clearDisplay(mob.entity, true);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    @Test
+    void hologramsAreReusedAndExpireInTicksNotFollowInvocations() {
+        holograms();
+        config.set("hologram_follow_speed", 7);
+        Model mob = mob(null);
+        damage(mob, 1);
+        advance(1);
+        mob.health = 10;
+        damage(mob, 10);
+        assertEquals(1, stands.size());
+        assertEquals("AAAAADDDDD", stands.getFirst().name);
+        mob.location.add(2, 0, 0);
+        advance(7);
+        assertEquals(mob.location.getX(), stands.getFirst().location.getX());
+        assertEquals("AAAAADDDDD", stands.getFirst().name);
+        assertEquals(1, stands.size());
+        advance(12);
+        assertTrue(stands.getFirst().valid);
+        advance(1);
+        assertFalse(stands.getFirst().valid);
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        assertNull(mob.name);
+    }
+
+    @Test
+    void sharedHologramCleanupCancelsPendingRefreshAndDropsOwnership() {
+        alwaysVisible();
+        holograms();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        Model stand = stands.getFirst();
+        assertTrue(HolographUtil.HOLOGRAPH_UTIL.isActive(stand.entity));
+        heal(mob, 1);
+        HolographUtil.HOLOGRAPH_UTIL.cleanup((ArmorStand) stand.entity);
+        advance(5);
+        assertEquals(1, stands.size());
+        assertFalse(stand.valid);
+        assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stand.entity));
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        assertFalse(mob.data.has(key("health-bar-activated")));
+        load(mob);
+        assertEquals(1, stands.size());
+    }
+
+    @Test
+    void failedHologramFollowRemovesTheDisplayWithoutRespawning() {
+        alwaysVisible();
+        holograms();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        Model stand = stands.getFirst();
+        stand.teleportSucceeds = false;
+        mob.location.add(1, 0, 0);
+        advance(5);
+        assertFalse(stand.valid);
+        assertFalse(HolographUtil.HOLOGRAPH_UTIL.isActive(stand.entity));
+        assertEquals(1, stands.size());
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        verify(logger).warning(contains("Could not move hologram"));
+    }
+
+    @Test
+    void shutdownDuringFollowTeleportStopsBothBarsWithoutRestartingTicker() {
+        alwaysVisible();
+        holograms();
+        Model first = mob("First original");
+        Model second = mob("Second original");
+        damage(first, 1);
+        damage(second, 1);
+        advance(1);
+        assertEquals(2, stands.size());
+        first.location.add(1, 0, 0);
+        second.location.add(1, 0, 0);
+        fixture.onTeleport = entity -> listener.shutdown();
+
+        assertDoesNotThrow(() -> advance(2 * FOLLOW_INTERVAL_TICKS));
+
+        assertTrue(stands.stream()
+                         .noneMatch(stand -> stand.valid));
+        assertTrue(fixture.clock.allCancelled());
+        assertEquals(1, scheduled.size());
+        assertEquals(2, stands.size());
+        assertEquals("First original", first.name);
+        assertEquals("Second original", second.name);
+    }
+
+    @Test
+    void shutdownAndRestartRecoverOnlyActivatedBarsInEitherMode() {
+        alwaysVisible();
+        Model activated = mob("Original");
+        Model untouched = mob("Untouched");
+        damage(activated, 1);
+        advance(1);
+        listener.shutdown();
+        assertEquals("Original", activated.name);
+        assertTrue(activated.data.has(key("health-bar-activated")));
+        HealthBarListener restarted = new HealthBarListener();
+        restarted.restorePersistedNames();
+        restarted.refreshPersistedHolograms();
+        assertEquals("AAAAAAAAAA", activated.name);
+        assertEquals("Untouched", untouched.name);
+        restarted.refreshPersistedHolograms();
+        restarted.shutdown();
+        assertEquals("Original", activated.name);
+
+        holograms();
+        HealthBarListener switched = new HealthBarListener();
+        switched.refreshPersistedHolograms();
+        switched.refreshPersistedHolograms();
+        assertEquals(1, stands.size());
+        switched.shutdown();
+    }
+
+    @Test
+    void sameListenerResumesAfterReloadButPendingOldTasksCannotRecreateBars() {
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        heal(mob, 3);
+        listener.shutdown();
+        advance(2);
+        assertEquals("Original", mob.name);
+        listener.refreshPersistedHolograms();
+        assertEquals("AAAAAAAAAA", mob.name);
+        mob.health = 10;
+        damage(mob, 10);
+        assertEquals("AAAAADDDDD", mob.name);
+        listener.shutdown();
+        config.set("enable_health_bar", false);
+        listener.refreshPersistedHolograms();
+        assertEquals("Original", mob.name);
+        assertFalse(mob.data.has(key("health-bar-activated")));
+    }
+
+    @Test
+    void temporaryHealRefreshesAnExistingBarAndResetsItsExpiry() {
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 10);
+        advance(18);
+        heal(mob, 6);
+        mob.health = 16;
+        advance(1);
+        assertEquals("AAAAAAAADD", mob.name);
+        advance(19);
+        assertEquals("AAAAAAAADD", mob.name);
+        advance(1);
+        assertEquals("Original", mob.name);
+        assertEquals(1, scheduled.size());
+    }
+
+    @Test
+    void committedDamageActivatesImmediatelyButFollowingHealingWaitsForItsCommit() {
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 10);
+        assertEquals("AAAAADDDDD", mob.name);
+        heal(mob, 6);
+        heal(mob, 2);
+        assertEquals("AAAAADDDDD", mob.name);
+        mob.health = 18;
+        advance(1);
+        assertEquals("AAAAAAAAAD", mob.name);
+        assertEquals(1, scheduled.size());
+    }
+
+    @Test
+    void loadMigratesLegacyActivationAndDisabledRecoveryClearsIt() {
+        alwaysVisible();
+        holograms();
+        Model mob = mob(null);
+        mob.data.set(key("always-visible-health-hologram"), BOOLEAN, true);
+        load(mob);
+        load(mob);
+        assertEquals(1, stands.size());
+        assertFalse(mob.data.has(key("always-visible-health-hologram")));
+        assertTrue(mob.data.has(key("health-bar-activated")));
+        config.set("enable_health_bar", false);
+        advance(1);
+        assertFalse(stands.getFirst().valid);
+        assertFalse(mob.data.has(key("health-bar-activated")));
+        load(mob);
+        assertEquals(1, stands.size());
+    }
+
+    @Test
+    void unloadDropsPendingWorkAndRestoresNameWithoutLosingActivation() {
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        heal(mob, 2);
+        listener.onEntitiesUnload(new EntitiesUnloadEvent(mock(Chunk.class), List.of(mob.entity)));
+        loaded.remove(mob.id);
+        advance(4);
+        assertEquals("Original", mob.name);
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        Model replacement = fixture.entity(mob.id, LivingEntity.class, mob.name, mob.data);
+        load(replacement);
+        assertEquals("AAAAAAAAAA", replacement.name);
+        listener.clearDisplay(replacement.entity, true);
+        assertEquals("Original", replacement.name);
+    }
+
+    @Test
+    void removedEntityIsNeverMutatedAndItsPersistedOverlayCanRecover() {
+        alwaysVisible();
+        Model mob = mob("Original");
+        damage(mob, 1);
+        advance(1);
+        clearInvocations(mob.entity);
+        listener.onEntityRemove(new EntityRemoveEvent(mob.entity, EntityRemoveEvent.Cause.PLUGIN));
+        loaded.remove(mob.id);
+        advance(3);
+        verify(mob.entity, never()).setCustomName(any());
+        verify(mob.entity, never()).setCustomNameVisible(true);
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        Model replacement = fixture.entity(mob.id, LivingEntity.class, mob.name, mob.data);
+        replacement.visible = true;
+        load(replacement);
+        listener.clearDisplay(replacement.entity, true);
+        assertEquals("Original", replacement.name);
+    }
+
+    @Test
+    void healingAndResurrectionCoalesceAndDeathPreventsRecreation() {
+        alwaysVisible();
+        Model mob = mob("Original");
+        heal(mob, 2);
+        EntityResurrectEvent resurrection = new EntityResurrectEvent(mob.entity, EquipmentSlot.HAND);
+        resurrection.setCancelled(false);
+        listener.updateHealthBarOnResurrection(resurrection);
+        assertEquals("Original", mob.name);
+        mob.health = 1;
+        advance(1);
+        assertEquals("ADDDDDDDDD", mob.name);
+        assertEquals(1, scheduled.size());
+        heal(mob, 2);
+        EntityDeathEvent death = new EntityDeathEvent(mob.entity, fixture.damageSource, List.of());
+        mob.dead = true;
+        listener.handleDeathEvents(death);
+        advance(3);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.data.has(key("health-bar-activated")));
+        load(mob);
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void onlyPositiveConfirmedDamageCanActivateAndTemporaryHealingCannot() throws Exception {
+        Model mob = mob("Original");
+        for (double amount : new double[]{0, -1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            damage(mob, amount);
+        }
+        config.set("enable_health_bar", false);
+        damage(mob, 1);
+        config.set("enable_health_bar", true);
+        mob.valid = false;
+        damage(mob, 1);
+        mob.valid = true;
+        mob.dead = true;
+        damage(mob, 1);
+        mob.dead = false;
+        heal(mob, 2);
+        EntityResurrectEvent resurrection = new EntityResurrectEvent(mob.entity, EquipmentSlot.HAND);
+        resurrection.setCancelled(true);
+        EventHandler policy = HealthBarListener.class.getMethod("updateHealthBarOnResurrection", EntityResurrectEvent.class)
+                                                     .getAnnotation(EventHandler.class);
+        RegisteredListener registration = new RegisteredListener(listener, (target, event) -> listener.updateHealthBarOnResurrection(resurrection), policy.priority(), fixture.plugin, policy.ignoreCancelled());
+        registration.callEvent(resurrection);
+        advance(2);
+        assertTrue(scheduled.isEmpty());
+        assertEquals("Original", mob.name);
+        assertFalse(mob.data.has(key("health-bar-activated")));
+    }
+
+    @Test
+    void bukkitRegistrationFiltersCancelledHealing() throws Exception {
+        alwaysVisible();
+        Model mob = mob("Original");
+        EntityRegainHealthEvent healing = new EntityRegainHealthEvent(mob.entity, 2, EntityRegainHealthEvent.RegainReason.CUSTOM);
+        healing.setCancelled(true);
+        EventHandler policy = HealthBarListener.class.getMethod("updateHealthBarOnHeal", EntityRegainHealthEvent.class)
+                                                     .getAnnotation(EventHandler.class);
+        RegisteredListener registration = new RegisteredListener(listener, (target, event) -> listener.updateHealthBarOnHeal(healing), policy.priority(), fixture.plugin, policy.ignoreCancelled());
+        registration.callEvent(healing);
+        advance(2);
+        assertTrue(scheduled.isEmpty());
+        assertEquals("Original", mob.name);
+    }
+
+    @Test
+    void pendingHealingAndCommittedDamageCannotReviveAfterShutdown() {
+        Model mob = mob("Original");
+        damage(mob, 1);
+        heal(mob, 2);
+        listener.shutdown();
+        advance(2);
+        assertEquals("Original", mob.name);
+        assertFalse(mob.data.has(key("health-name-overridden")));
+        damage(mob, 1);
+        assertEquals(1, scheduled.size());
+    }
+
+    @Test
+    void zeroHealthHasNoAliveSymbolsAndInvalidMaximumIsDiagnosed() {
+        Model mob = mob("Original");
+        damage(mob, 1);
+        mob.health = 0;
+        advance(FOLLOW_INTERVAL_TICKS);
+        assertEquals("DDDDDDDDDD", mob.name);
+        listener.clearDisplay(mob.entity, true);
+        mob.health = 5;
+        mob.maximumHealth = Double.NaN;
+        damage(mob, 1);
+        advance(1);
+        assertEquals("Original", mob.name);
+        verify(logger).warning(contains("invalid MAX_HEALTH"));
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
+    }
+
+    @Test
+    void inlinePlayersAreNeverRenamedWhileHologramsRecoverOnRejoin() {
+        alwaysVisible();
+        Model player = fixture.entity(Player.class, "Player plugin name");
+        damage(player, 1);
+        heal(player, 1);
+        advance(1);
+        assertTrue(scheduled.isEmpty());
+        assertEquals("Player plugin name", player.name);
+        holograms();
+        damage(player, 1);
+        advance(1);
+        assertEquals(1, stands.size());
+        PlayerQuitEvent quit = new PlayerQuitEvent((Player) player.entity, null);
+        listener.onPlayerQuit(quit);
+        assertFalse(stands.getFirst().valid);
+        PlayerJoinEvent join = new PlayerJoinEvent((Player) player.entity, null);
+        listener.onPlayerJoin(join);
+        assertEquals(1, stands.size());
+        advance(1);
+        assertEquals(2, stands.size());
+        assertEquals("Player plugin name", player.name);
+        verify(player.entity, never()).setCustomName(any());
+    }
+
+    @Test
+    void missingMaximumIsDiagnosedAndInvalidEntitiesCannotActivate() {
+        Model mob = mob("Original");
+        mob.hasMaximum = false;
+        damage(mob, 1);
+        advance(1);
+        verify(logger).warning(contains("missing or invalid MAX_HEALTH"));
+        assertTrue(scheduled.getFirst()
+                            .isCancelled());
+        mob.hasMaximum = true;
+        mob.valid = false;
+        damage(mob, 1);
+        advance(1);
+        assertTrue(scheduled.getLast()
+                            .isCancelled());
+        assertEquals("Original", mob.name);
+    }
+
+    private void holograms() {
+        config.set("enable_hologram_health_bar", true);
+    }
+
+    private void alwaysVisible() {
+        config.set("health_bar_always_visible", true);
+    }
+
+    private Model mob(String name) {
+        return fixture.mob(name);
+    }
+
+    private void damage(Model model, double appliedDamage) {
+        listener.showCommittedDamage(model.entity, appliedDamage);
+    }
+
+    private void heal(Model model, double amount) {
+        listener.updateHealthBarOnHeal(new EntityRegainHealthEvent(model.entity, amount, EntityRegainHealthEvent.RegainReason.CUSTOM));
+    }
+
+    private void load(Model model) {
+        listener.onEntitiesLoad(new EntitiesLoadEvent(mock(Chunk.class), List.of(model.entity)));
+    }
+
+    private void advance(int ticks) {
+        fixture.clock.advance(ticks);
+    }
+}

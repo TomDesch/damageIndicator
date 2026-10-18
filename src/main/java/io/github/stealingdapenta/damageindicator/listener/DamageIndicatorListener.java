@@ -1,13 +1,22 @@
 package io.github.stealingdapenta.damageindicator.listener;
 
+import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
+
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
 import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
 import io.github.stealingdapenta.damageindicator.utils.AttackerVictimPair;
-import io.github.stealingdapenta.damageindicator.utils.MergedDamageInfo;
-import java.util.Arrays;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BiConsumer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -16,329 +25,542 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
-import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.EntityResurrectEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 /**
- * Listener responsible for displaying floating damage indicators above damaged entities, and cleaning up any "orphaned" ArmorStands on a chunk load.
+ * Owns transient damage displays; a single ticker advances all merge and animation state.
+ * Native hits observe committed HP at the next hit, normal Bukkit heal/resurrection boundary, or heartbeat.
+ * Silent setHealth interleavings between those boundaries cannot be attributed reliably.
  */
 public class DamageIndicatorListener implements Listener {
 
-    private static final String CUSTOM_NSK_TAG = "customnsktag";
+    private static final NamespacedKey HOLOGRAM_KEY = Objects.requireNonNull(NamespacedKey.fromString("damageindicator:customnsktag"));
+    private static final int TICKS_PER_SECOND = 20;
+    private static final long HEARTBEAT_PERIOD_TICKS = 1;
+    private static final int ANIMATION_DURATION_TICKS = 30;
+    private static final int DAMAGE_DECIMAL_PLACES = 2;
+    private static final double MAX_HORIZONTAL_SPEED = 0.05;
+    private static final double HIT_HEIGHT_OFFSET = 1;
+    private final BiConsumer<LivingEntity, Double> appliedDamageConsumer;
+    private final Map<UUID, PendingHit> pendingHits = new HashMap<>();
+    private final Map<AttackerVictimPair, MergedDisplay> mergedDamage = new HashMap<>();
+    private final Map<UUID, Animation> animations = new HashMap<>();
+    private BukkitTask heartbeat;
+    private long currentTick;
+    private long shutdownGeneration;
+    private boolean shuttingDown;
 
-    // Map to track merged damage for attacker-victim pairs
-    private final Map<AttackerVictimPair, MergedDamageInfo> mergedDamageMap = new HashMap<>();
+    public DamageIndicatorListener() {
+        this((victim, damage) -> {
+        });
+    }
 
     /**
-     * Returns the unique tag key used to identify plugin-controlled armor stands.
+     * Delivers confirmed native HP loss synchronously, before optional numeric rendering.
      */
+    public DamageIndicatorListener(BiConsumer<LivingEntity, Double> appliedDamageConsumer) {
+        this.appliedDamageConsumer = Objects.requireNonNull(appliedDamageConsumer);
+    }
+
     public static NamespacedKey getCustomNamespacedKey() {
-        return new NamespacedKey(DamageIndicator.getInstance(), CUSTOM_NSK_TAG);
+        return HOLOGRAM_KEY;
     }
 
-    /**
-     * On chunk load, removes any armor stands left over from animation tasks (e.g. after crashes) by checking for a plugin-specific tag.
-     */
-    @EventHandler
-    public void removeStuckArmorStands(ChunkLoadEvent event) {
-        Arrays.stream(event.getChunk()
-                           .getEntities())
-              .forEach(this::maybeRemoveArmorStandIfTagged);
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void removeStuckArmorStands(EntitiesLoadEvent event) {
+        event.getEntities()
+             .forEach(this::maybeRemoveArmorStandIfTagged);
     }
 
-    private void maybeRemoveArmorStandIfTagged(Entity entity) {
-        if (hasCustomTag(entity)) {
-            entity.remove();
+    void maybeRemoveArmorStandIfTagged(Entity entity) {
+        if (entity instanceof ArmorStand stand && HOLOGRAPH_UTIL.isTaggedHologram(stand) && !HOLOGRAPH_UTIL.isActive(stand)) {
+            HOLOGRAPH_UTIL.remove(stand);
         }
     }
 
-    private boolean hasCustomTag(Entity entity) {
-        return Boolean.TRUE.equals(entity.getPersistentDataContainer()
-                                         .get(getCustomNamespacedKey(), PersistentDataType.BOOLEAN));
+    public void cleanupLoadedChunks() {
+        Bukkit.getWorlds()
+              .forEach(world -> world.getEntities()
+                                     .forEach(this::maybeRemoveArmorStandIfTagged));
     }
 
-    /**
-     * Displays a floating number above the damaged entity using an invisible ArmorStand.
-     * If damage merge is enabled and this is from an attacker, merges the damage.
-     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void displayDamageIndicator(EntityDamageEvent event) {
-        Entity entity = event.getEntity();
-        if (!(entity instanceof LivingEntity livingEntity)) {
+        if (shuttingDown || event.isCancelled() || !(event.getEntity() instanceof LivingEntity victim)) {
+            return;
+        }
+        double finalDamage = event.getFinalDamage();
+        if (!Double.isFinite(finalDamage)) {
+            warnInvalidObservation("non-finite final damage", victim.getUniqueId());
+            return;
+        }
+        if (finalDamage <= 0) {
+            return;
+        }
+        long generation = shutdownGeneration;
+        flushPending(victim, false);
+        if (generation != shutdownGeneration || !victim.isValid() || !isDamageObservationEnabled()) {
+            return;
+        }
+        double health = victim.getHealth();
+        if (!isValidHealth(health, victim.getUniqueId()) || health == 0 || generation != shutdownGeneration) {
+            return;
+        }
+        Location location = getHitLocation(victim);
+        if (!hasWorld(location)) {
+            return;
+        }
+        Entity attacker = event instanceof EntityDamageByEntityEvent attack ? resolveAttacker(attack.getDamager()) : null;
+        if (generation != shutdownGeneration) {
+            return;
+        }
+        pendingHits.put(victim.getUniqueId(), new PendingHit(health, finalDamage, attacker == null ? null : attacker.getUniqueId(),
+                                                           event.getCause(), location, currentTick));
+        startHeartbeat();
+    }
+
+    private boolean isDamageObservationEnabled() {
+        return ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean() || ConfigKeys.ENABLE_HEALTH_BAR.asBoolean();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityRegainHealth(EntityRegainHealthEvent event) {
+        if (!event.isCancelled() && event.getEntity() instanceof LivingEntity victim) {
+            // Healing is not committed yet, so it must not erase the preceding hit.
+            flushPending(victim, false);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityResurrect(EntityResurrectEvent event) {
+        if (!event.isCancelled()) {
+            flushPending(event.getEntity(), true);
+        }
+    }
+
+    private void flushPending(UUID victimId) {
+        Entity entity = Bukkit.getEntity(victimId);
+        if (entity instanceof LivingEntity victim) {
+            flushPending(victim, false);
+        } else {
+            pendingHits.remove(victimId);
+        }
+    }
+
+    private void flushPending(LivingEntity victim, boolean terminal) {
+        PendingHit hit = pendingHits.remove(victim.getUniqueId());
+        if (hit == null || !terminal && !victim.isValid()) {
+            return;
+        }
+        long generation = shutdownGeneration;
+        double health = victim.getHealth();
+        if (!isValidHealth(health, victim.getUniqueId()) || generation != shutdownGeneration) {
+            return;
+        }
+        double damage = Math.clamp(hit.health() - health, 0, hit.finalDamage());
+        if (shuttingDown || !Double.isFinite(damage) || damage <= 0) {
+            return;
+        }
+        appliedDamageConsumer.accept(victim, damage);
+        if (generation != shutdownGeneration || !canDisplayDamage(victim, damage)) {
+            return;
+        }
+        TextColor color = resolveColorForCause(hit.cause());
+        if (hit.attackerId() != null && ConfigKeys.ENABLE_DAMAGE_MERGE.asBoolean()) {
+            displayMergedDamage(victim.getUniqueId(), hit.attackerId(), hit.location(), damage, color, hit.tick());
+        } else {
+            animateArmorStand(hit.location(), damage, color);
+        }
+    }
+
+    private boolean isValidHealth(double health, UUID victimId) {
+        if (!Double.isFinite(health) || health < 0) {
+            warnInvalidObservation("invalid health", victimId);
+            return false;
+        }
+        return true;
+    }
+
+    private void warnInvalidObservation(String reason, UUID victimId) {
+        DamageIndicator.getInstance()
+                       .getLogger()
+                       .warning("Cannot observe native damage for " + victimId + ": " + reason + ".");
+    }
+
+    /**
+     * Displays already-applied HP damage; never modifies health or manufactures a damage event.
+     */
+    public void displayDamage(LivingEntity victim, Entity attacker, double damage, EntityDamageEvent.DamageCause cause) {
+        if (!canDisplayDamage(victim, damage)) {
+            return;
+        }
+        Location location = getHitLocation(victim);
+        if (!hasWorld(location)) {
+            return;
+        }
+        TextColor color = resolveColorForCause(cause == null ? EntityDamageEvent.DamageCause.CUSTOM : cause);
+        if (!canMergeDamage(victim, attacker)) {
+            animateArmorStand(location, damage, color);
             return;
         }
 
-        double damageDealt = event.getFinalDamage();
-        TextColor textColor = resolveColorForCause(event.getCause());
-        Location location = getHitLocation(livingEntity);
-
-        // Check if damage merge is enabled and this is an entity attack
-        if (ConfigKeys.ENABLE_DAMAGE_MERGE.asBoolean() && event instanceof EntityDamageByEntityEvent damageByEntityEvent) {
-            Entity damager = damageByEntityEvent.getDamager();
-            handleMergedDamage(damager, livingEntity, location, damageDealt, textColor);
-        } else {
-            // Normal damage indicator without merging
-            animateArmorStand(location, damageDealt, textColor);
-        }
+        displayMergedDamage(victim.getUniqueId(), resolveAttacker(attacker).getUniqueId(), location, damage, color, currentTick);
     }
 
-    /**
-     * Handles merged damage display - either creates a new merged damage or updates existing one.
-     */
-    private void handleMergedDamage(Entity attacker, LivingEntity victim, Location location, double damage, TextColor color) {
-        // Resolve the actual attacker (handle projectiles)
-        Entity actualAttacker = resolveActualAttacker(attacker);
-
-        AttackerVictimPair pair = new AttackerVictimPair(actualAttacker, victim);
-        MergedDamageInfo mergedInfo = mergedDamageMap.get(pair);
-
-        if (mergedInfo != null) {
-            // Update existing merged damage
-            mergedInfo.addDamage(damage);
-            mergedInfo.setLatestColor(color);
-            updateMergedDamageDisplay(mergedInfo);
-
-            // Cancel old timeout task and create new one
-            scheduleJumpOut(pair, mergedInfo);
-        } else {
-            // Create new merged damage
-            ArmorStand armorStand = createArmorStand(location, damage, color);
-            armorStand.setGravity(false); // Merged damage should float in place
-
-            mergedInfo = new MergedDamageInfo(damage, color, armorStand);
-            mergedDamageMap.put(pair, mergedInfo);
-
-            // Start following the victim
-            startFollowingVictim(victim, mergedInfo);
-
-            // Schedule the jump out animation
-            scheduleJumpOut(pair, mergedInfo);
+    private boolean hasWorld(Location location) {
+        if (location.getWorld() != null) {
+            return true;
         }
+        DamageIndicator.getInstance()
+                       .getLogger()
+                       .warning("Cannot display damage without a victim world.");
+        return false;
     }
 
-    /**
-     * Resolves the actual attacker from the damager entity. If the damager is a projectile, return the shooter instead.
-     */
-    private Entity resolveActualAttacker(Entity damager) {
-        if (damager instanceof org.bukkit.entity.Projectile projectile) {
-            if (projectile.getShooter() instanceof Entity shooter) {
-                return shooter;
+    private boolean canDisplayDamage(LivingEntity victim, double damage) {
+        return !shuttingDown && victim != null && Double.isFinite(damage) && damage > 0 && ConfigKeys.ENABLE_DAMAGE_INDICATOR.asBoolean();
+    }
+
+    private boolean canMergeDamage(LivingEntity victim, Entity attacker) {
+        return attacker != null && victim.isValid() && ConfigKeys.ENABLE_DAMAGE_MERGE.asBoolean();
+    }
+
+    private Entity resolveAttacker(Entity attacker) {
+        if (attacker instanceof Projectile projectile && projectile.getShooter() instanceof Entity shooter) {
+            return shooter;
+        }
+        return attacker;
+    }
+
+    private void displayMergedDamage(UUID victimId, UUID attackerId, Location location, double damage, TextColor color, long hitTick) {
+        long generation = shutdownGeneration;
+        AttackerVictimPair pair = new AttackerVictimPair(attackerId, victimId);
+        MergedDisplay display = mergedDamage.get(pair);
+        if (display != null && !display.stand.isValid()) {
+            removeMerged(pair);
+            display = null;
+        }
+        if (generation != shutdownGeneration) {
+            return;
+        }
+        if (display == null) {
+            ArmorStand stand = createArmorStand(location, damage, color);
+            if (generation != shutdownGeneration) {
+                HOLOGRAPH_UTIL.remove(stand);
+                return;
             }
+            if (!stand.isValid()) {
+                return;
+            }
+            display = new MergedDisplay(victimId, stand, damage);
+            mergedDamage.put(pair, display);
+            HOLOGRAPH_UTIL.onCleanup(stand, () -> removeMerged(pair));
+        } else {
+            double total = display.damage + damage;
+            if (!Double.isFinite(total)) {
+                DamageIndicator.getInstance()
+                               .getLogger()
+                               .warning("Merged damage overflow; starting a new damage display.");
+                release(pair);
+                if (generation == shutdownGeneration) {
+                    displayMergedDamage(victimId, attackerId, location, damage, color, hitTick);
+                }
+                return;
+            }
+            display.damage = total;
+            display.stand.setCustomName(formatDamage(total, color));
         }
-        return damager;
-    }
-
-    /**
-     * Updates the display of merged damage armor stand.
-     */
-    private void updateMergedDamageDisplay(MergedDamageInfo info) {
-        ArmorStand armorStand = info.getArmorStand();
-        if (armorStand != null && armorStand.isValid()) {
-            double roundedDamage = Math.round(info.getTotalDamage() * 100.0) / 100.0;
-            armorStand.customName(Component.text(roundedDamage, info.getLatestColor()));
-        }
-    }
-
-    /**
-     * Starts a repeating task to make the armor stand follow the victim entity.
-     */
-    private void startFollowingVictim(LivingEntity victim, MergedDamageInfo info) {
-        ArmorStand armorStand = info.getArmorStand();
-        if (armorStand == null) {
+        if (generation != shutdownGeneration || mergedDamage.get(pair) != display) {
             return;
         }
-
-        BukkitTask followTask = Bukkit.getScheduler()
-                                      .runTaskTimer(DamageIndicator.getInstance(), () -> {
-                                                        // Stop following if victim or armor stand is no longer valid
-                                                        if (!victim.isValid() || !armorStand.isValid()) {
-                                                            info.getFollowTask()
-                                                                .cancel();
-                                                            return;
-                                                        }
-
-                                                        // Update armor stand position to follow victim
-                                                        Location targetLoc = getHitLocation(victim);
-                                                        armorStand.teleport(targetLoc);
-                                                    }, 0L, // Start immediately
-                                                    1L  // Run every tick for smooth following
-                                                   );
-
-        info.setFollowTask(followTask);
+        display.deadline = hitTick + (long) Math.ceil(ConfigKeys.DAMAGE_MERGE_TIMEOUT.asDouble() * TICKS_PER_SECOND);
+        startHeartbeat();
     }
 
-    /**
-     * Schedules the jump out animation after the timeout period.
-     */
-    private void scheduleJumpOut(AttackerVictimPair pair, MergedDamageInfo info) {
-        double timeoutSeconds = ConfigKeys.DAMAGE_MERGE_TIMEOUT.asDouble();
-        long timeoutTicks = (long) (timeoutSeconds * 20); // Convert seconds to ticks
-
-        BukkitTask task = Bukkit.getScheduler()
-                                .runTaskLater(DamageIndicator.getInstance(), () -> executeJumpOut(pair, info), timeoutTicks);
-
-        info.setTimeoutTask(task);
+    private ArmorStand createArmorStand(Location location, double damage, TextColor color) {
+        return HOLOGRAPH_UTIL.createArmorStandHologram(location, Component.text(formatNumber(damage), color));
     }
 
-    /**
-     * Executes the jump out animation for merged damage.
-     */
-    private void executeJumpOut(AttackerVictimPair pair, MergedDamageInfo info) {
-        ArmorStand armorStand = info.getArmorStand();
-        if (armorStand == null || !armorStand.isValid()) {
-            mergedDamageMap.remove(pair);
+    private String formatDamage(double damage, TextColor color) {
+        return TEXT_UTIL.serializeComponent(Component.text(formatNumber(damage), color));
+    }
+
+    private String formatNumber(double damage) {
+        return Double.toString(BigDecimal.valueOf(damage)
+                                         .setScale(DAMAGE_DECIMAL_PLACES, RoundingMode.HALF_UP)
+                                         .doubleValue());
+    }
+
+    private TextColor resolveColorForCause(EntityDamageEvent.DamageCause cause) {
+        ConfigKeys key;
+        try {
+            key = ConfigKeys.valueOf(cause.name());
+        } catch (IllegalArgumentException unknownCause) {
+            key = ConfigKeys.OTHER;
+        }
+        return key.getTextColor();
+    }
+
+    public void animateArmorStand(Location location, double damage, TextColor color) {
+        if (shuttingDown) {
             return;
         }
-
-        // Remove from map first
-        mergedDamageMap.remove(pair);
-
-        // Cancel the follow task so the armor stand stops following
-        if (info.getFollowTask() != null && !info.getFollowTask()
-                                                 .isCancelled()) {
-            info.getFollowTask()
-                .cancel();
+        long generation = shutdownGeneration;
+        ArmorStand stand = createArmorStand(location, damage, color);
+        if (generation != shutdownGeneration) {
+            HOLOGRAPH_UTIL.remove(stand);
+        } else if (stand.isValid()) {
+            startAnimation(stand, ANIMATION_DURATION_TICKS);
         }
-
-        // Enable gravity and give upward velocity for jump effect (same as regular damage)
-        armorStand.setGravity(true);
-        double initialVelocityY = ConfigKeys.HOLOGRAM_VELOCITY_Y.asDouble();
-        int duration = ConfigKeys.DAMAGE_MERGE_JUMP_DURATION.asInt();
-        double gravity = ConfigKeys.HOLOGRAM_GRAVITY.asDouble();
-
-        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));
-
-        AtomicInteger steps = new AtomicInteger(duration);
-
-        Bukkit.getScheduler()
-              .runTaskTimer(DamageIndicator.getInstance(), task -> {
-                  if (!armorStand.isValid()) {
-                      task.cancel();
-                      return;
-                  }
-
-                  armorStand.teleport(armorStand.getLocation()
-                                                .add(velocity));
-                  velocity.subtract(new Vector(0, gravity, 0)); // apply gravity
-
-                  if (steps.decrementAndGet() <= 0) {
-                      armorStand.remove();
-                      task.cancel();
-                  }
-              }, 0, 1);
     }
 
-    /**
-     * Cleans up merged damage when the entity dies.
-     */
+    private void startAnimation(ArmorStand stand, int duration) {
+        UUID id = stand.getUniqueId();
+        animations.put(id, new Animation(stand, duration, new Vector(randomHorizontalSpeed(), ConfigKeys.HOLOGRAM_VELOCITY_Y.asDouble(), randomHorizontalSpeed()), ConfigKeys.HOLOGRAM_GRAVITY.asDouble()));
+        HOLOGRAPH_UTIL.onCleanup(stand, () -> removeAnimation(id));
+        startHeartbeat();
+    }
+
+    private double randomHorizontalSpeed() {
+        return ThreadLocalRandom.current()
+                                .nextDouble(-MAX_HORIZONTAL_SPEED, MAX_HORIZONTAL_SPEED);
+    }
+
+    private void startHeartbeat() {
+        if (!shuttingDown && heartbeat == null) {
+            heartbeat = Bukkit.getScheduler()
+                              .runTaskTimer(DamageIndicator.getInstance(), this::advance, HEARTBEAT_PERIOD_TICKS, HEARTBEAT_PERIOD_TICKS);
+        }
+    }
+
+    private void advance() {
+        currentTick++;
+        // Entity callbacks can detach other displays while this snapshot is processed.
+        new ArrayList<>(pendingHits.keySet()).forEach(this::flushPending);
+        new ArrayList<>(mergedDamage.keySet()).forEach(this::advanceMergedDisplay);
+        new ArrayList<>(animations.keySet()).forEach(this::advanceAnimation);
+        if (heartbeat != null && pendingHits.isEmpty() && mergedDamage.isEmpty() && animations.isEmpty()) {
+            heartbeat.cancel();
+            heartbeat = null;
+        }
+    }
+
+    private void advanceMergedDisplay(AttackerVictimPair pair) {
+        MergedDisplay display = mergedDamage.get(pair);
+        if (display == null) {
+            return;
+        }
+        Entity victim = Bukkit.getEntity(display.victimId);
+        if (!display.stand.isValid() || victim == null || !victim.isValid()) {
+            removeMerged(pair);
+        } else if (currentTick >= display.deadline) {
+            release(pair);
+        } else if (!HOLOGRAPH_UTIL.teleportIfMoved(display.stand, getHitLocation(victim))) {
+            removeMerged(pair);
+        }
+    }
+
+    private void advanceAnimation(UUID id) {
+        Animation animation = animations.get(id);
+        if (animation == null) {
+            return;
+        }
+        if (!animation.stand.isValid()) {
+            removeAnimation(id);
+            return;
+        }
+        Location nextLocation = animation.stand.getLocation()
+                                               .add(animation.velocity);
+        if (!HOLOGRAPH_UTIL.teleportIfMoved(animation.stand, nextLocation)) {
+            removeAnimation(id);
+            return;
+        }
+        animation.velocity.setY(animation.velocity.getY() - animation.gravity);
+        if (--animation.remaining == 0) {
+            removeAnimation(id);
+        }
+    }
+
+    private void release(AttackerVictimPair pair) {
+        MergedDisplay display = mergedDamage.remove(pair);
+        if (display == null) {
+            return;
+        }
+        if (display.stand.isValid()) {
+            startAnimation(display.stand, ConfigKeys.DAMAGE_MERGE_JUMP_DURATION.asInt());
+        } else {
+            HOLOGRAPH_UTIL.remove(display.stand);
+        }
+    }
+
+    private void removeMerged(AttackerVictimPair pair) {
+        MergedDisplay display = mergedDamage.remove(pair);
+        if (display != null) {
+            HOLOGRAPH_UTIL.remove(display.stand);
+        }
+    }
+
+    private void removeAnimation(UUID id) {
+        Animation animation = animations.remove(id);
+        if (animation != null) {
+            HOLOGRAPH_UTIL.remove(animation.stand);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityDeath(EntityDeathEvent event) {
-        LivingEntity entity = event.getEntity();
-
-        // Clean up any merged damage involving this entity
-        mergedDamageMap.entrySet()
-                       .removeIf(entry -> {
-                           MergedDamageInfo info = entry.getValue();
-                           boolean shouldRemove = false;
-
-                           // Check if this entity is involved (we need to compare by checking the armor stand location)
-                           ArmorStand armorStand = info.getArmorStand();
-                           if (armorStand != null && armorStand.isValid()) {
-                               Location standLoc = armorStand.getLocation();
-                               Location entityLoc = entity.getLocation();
-
-                               // If armor stand is near the dead entity, clean it up
-                               if (standLoc.getWorld()
-                                           .equals(entityLoc.getWorld()) && standLoc.distance(entityLoc) < 5.0) {
-                                   shouldRemove = true;
-                               }
-                           }
-
-                           if (shouldRemove) {
-                               info.cleanup();
-                           }
-
-                           return shouldRemove;
-                       });
+        UUID id = event.getEntity()
+                       .getUniqueId();
+        // Death can invalidate the victim before this callback, but its final merged number must survive.
+        flushPending(event.getEntity(), true);
+        flushPendingForAttackers(Set.of(id));
+        new ArrayList<>(mergedDamage.keySet()).stream()
+                                              .filter(pair -> pair.involves(id))
+                                              .forEach(this::release);
     }
 
-    /**
-     * Spawns a small invisible armor stand at the given location and tags it.
-     */
-    private ArmorStand createArmorStand(Location location, double damage, TextColor color) {
-        double roundedDamage = Math.round(damage * 100.0) / 100.0;
-
-        return location.getWorld()
-                       .spawn(location, ArmorStand.class, armorStand -> {
-                           armorStand.customName(Component.text(roundedDamage, color));
-                           armorStand.setCustomNameVisible(true);
-                           armorStand.setVisible(false);
-                           armorStand.setMarker(true);
-                           armorStand.setGravity(true);
-                           armorStand.setCollidable(false);
-                           armorStand.setSmall(true);
-                           armorStand.setInvulnerable(true);
-                           armorStand.getPersistentDataContainer()
-                                     .set(getCustomNamespacedKey(), PersistentDataType.BOOLEAN, true);
-                       });
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntitiesUnload(EntitiesUnloadEvent event) {
+        Set<UUID> ids = new HashSet<>();
+        event.getEntities()
+             .forEach(entity -> ids.add(entity.getUniqueId()));
+        removeForEntities(ids);
     }
 
-    /**
-     * Resolves a text color based on the damage cause. Falls back to ConfigKeys.OTHER if unknown.
-     */
-    private TextColor resolveColorForCause(EntityDamageEvent.DamageCause cause) {
-        try {
-            return ConfigKeys.valueOf(cause.name())
-                             .getTextColor();
-        } catch (IllegalArgumentException e) {
-            return ConfigKeys.OTHER.getTextColor();
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        Set<UUID> ids = new HashSet<>();
+        event.getWorld()
+             .getEntities()
+             .forEach(entity -> ids.add(entity.getUniqueId()));
+        removeForEntities(ids);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntityRemove(EntityRemoveEvent event) {
+        Entity entity = event.getEntity();
+        if (entity instanceof ArmorStand stand) {
+            HOLOGRAPH_UTIL.removed(stand);
+        } else if (event.getCause() != EntityRemoveEvent.Cause.DEATH) {
+            removeForEntities(Set.of(entity.getUniqueId()));
         }
     }
 
-    /**
-     * Animates a floating armor stand damage indicator that rises then disappears.
-     *
-     * @param location starting location
-     * @param damage   the amount of damage dealt
-     * @param color    the color of the displayed text
-     */
-    public void animateArmorStand(Location location, double damage, TextColor color) {
-        ArmorStand armorStand = createArmorStand(location, damage, color);
-
-        double initialVelocityY = ConfigKeys.HOLOGRAM_VELOCITY_Y.asDouble();
-        double gravity = ConfigKeys.HOLOGRAM_GRAVITY.asDouble();
-
-        Vector velocity = new Vector((Math.random() * 0.1 - 0.05), initialVelocityY, (Math.random() * 0.1 - 0.05));
-
-        AtomicInteger steps = new AtomicInteger(30); // 30 ticks total
-        int intervalTicks = 0; // run every tick (change if performance needed)
-
-        Bukkit.getScheduler()
-              .runTaskTimer(DamageIndicator.getInstance(), task -> {
-                  armorStand.teleport(armorStand.getLocation()
-                                                .add(velocity));
-                  velocity.subtract(new Vector(0, gravity, 0)); // apply gravity
-
-                  if (steps.decrementAndGet() <= 0) {
-                      armorStand.remove();
-                      task.cancel();
-                  }
-              }, 0, intervalTicks);
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        removeForEntities(Set.of(event.getPlayer()
+                                      .getUniqueId()));
     }
 
     /**
-     * Gets the location slightly above the entity's head where the indicator should start.
+     * Victim/display removal destroys a number; attacker removal only releases its completed hit.
      */
+    private void removeForEntities(Set<UUID> ids) {
+        pendingHits.keySet().removeAll(ids);
+        flushPendingForAttackers(ids);
+        for (AttackerVictimPair pair : new ArrayList<>(mergedDamage.keySet())) {
+            MergedDisplay display = mergedDamage.get(pair);
+            if (display == null) {
+                continue;
+            }
+            if (ids.contains(display.victimId) || ids.contains(display.stand.getUniqueId())) {
+                removeMerged(pair);
+            } else if (pair.involvesAny(ids)) {
+                release(pair);
+            }
+        }
+        for (UUID id : ids) {
+            removeAnimation(id);
+        }
+    }
+
+    private void flushPendingForAttackers(Set<UUID> ids) {
+        for (UUID victimId : new ArrayList<>(pendingHits.keySet())) {
+            PendingHit hit = pendingHits.get(victimId);
+            if (hit != null && hit.attackerId() != null && ids.contains(hit.attackerId())) {
+                flushPending(victimId);
+            }
+        }
+    }
+
+    public void shutdown() {
+        if (shuttingDown) {
+            return;
+        }
+        shuttingDown = true;
+        try {
+            shutdownGeneration++;
+            pendingHits.clear();
+            if (heartbeat != null) {
+                heartbeat.cancel();
+                heartbeat = null;
+            }
+            new ArrayList<>(mergedDamage.keySet()).forEach(this::removeMerged);
+            new ArrayList<>(animations.keySet()).forEach(this::removeAnimation);
+        } finally {
+            shuttingDown = false;
+        }
+    }
+
     public Location getHitLocation(Entity entity) {
         return entity.getLocation()
-                     .add(0d, 1d, 0d);
+                     .add(0, HIT_HEIGHT_OFFSET, 0);
+    }
+
+    private record PendingHit(double health, double finalDamage, UUID attackerId, EntityDamageEvent.DamageCause cause,
+                              Location location, long tick) {
+
+        private PendingHit {
+            location = location.clone();
+        }
+
+        @Override
+        public Location location() {
+            return location.clone();
+        }
+    }
+
+    private static final class MergedDisplay {
+
+        private final UUID victimId;
+        private final ArmorStand stand;
+        private double damage;
+        private long deadline;
+
+        private MergedDisplay(UUID victimId, ArmorStand stand, double damage) {
+            this.victimId = victimId;
+            this.stand = stand;
+            this.damage = damage;
+        }
+    }
+
+    private static final class Animation {
+
+        private final ArmorStand stand;
+        private final Vector velocity;
+        private final double gravity;
+        private int remaining;
+
+        private Animation(ArmorStand stand, int remaining, Vector velocity, double gravity) {
+            this.stand = stand;
+            this.remaining = remaining;
+            this.velocity = velocity;
+            this.gravity = gravity;
+        }
     }
 }

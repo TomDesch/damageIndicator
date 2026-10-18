@@ -3,22 +3,34 @@ package io.github.stealingdapenta.damageindicator.listener;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_FOLLOW_SPEED;
 import static io.github.stealingdapenta.damageindicator.config.ConfigKeys.HOLOGRAM_NAME_POSITION;
 import static io.github.stealingdapenta.damageindicator.utils.HolographUtil.HOLOGRAPH_UTIL;
+import static io.github.stealingdapenta.damageindicator.utils.TextUtil.TEXT_UTIL;
 
 import io.github.stealingdapenta.damageindicator.DamageIndicator;
-import io.github.stealingdapenta.damageindicator.utils.LivingEntityTaskInfo;
-import java.util.Arrays;
+import io.github.stealingdapenta.damageindicator.config.ConfigKeys;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
-import net.kyori.adventure.text.Component;
+import java.util.Objects;
+import java.util.SequencedSet;
+import java.util.UUID;
+import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
-import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 /**
@@ -26,98 +38,311 @@ import org.bukkit.scheduler.BukkitTask;
  */
 public class CustomNameListener implements Listener {
 
-    private final Map<LivingEntity, LivingEntityTaskInfo> entitiesWithActiveHolographicCustomNames = new HashMap<>();
+    private static final NamespacedKey HIDDEN_CUSTOM_NAME_KEY = Objects.requireNonNull(NamespacedKey.fromString("damageindicator:custom-name-hidden"));
+    private static final int DISCOVERY_INTERVAL_TICKS = 20;
+    private static final int DISCOVERY_BATCH_SIZE = 128;
+    private static final long HEARTBEAT_PERIOD_TICKS = 1;
+    private static final long FIRST_DISCOVERY_TICK = 1;
+    private final Map<UUID, NameDisplay> activeNames = new HashMap<>();
+    private final SequencedSet<UUID> candidates = new LinkedHashSet<>();
+    private BukkitTask heartbeat;
+    private long currentTick;
+    private long lifecycleGeneration;
+    private boolean stopped;
 
-    /**
-     * Handles entity spawn events. If the entity has a visible custom name, it's replaced with a floating ArmorStand hologram.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntitySpawn(EntitySpawnEvent event) {
-        if (event.getEntity() instanceof LivingEntity livingEntity) {
-            replaceWithHologramIfNeeded(livingEntity);
+        if (event.getEntity() instanceof LivingEntity entity && isEligible(entity) && isEnabled()) {
+            candidates.add(entity.getUniqueId());
+            startHeartbeat();
         }
     }
 
-    /**
-     * Handles chunk loading to replace custom names for entities already present in the chunk.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onChunkLoad(ChunkLoadEvent event) {
-        Arrays.stream(event.getChunk()
-                           .getEntities())
-              .filter(LivingEntity.class::isInstance)
-              .map(LivingEntity.class::cast)
-              .forEach(this::replaceWithHologramIfNeeded);
+    @EventHandler(priority = EventPriority.NORMAL)
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        event.getEntities()
+             .stream()
+             .filter(LivingEntity.class::isInstance)
+             .map(LivingEntity.class::cast)
+             .forEach(this::recoverAndReplaceCustomName);
     }
 
-    /**
-     * Cleans up the holographic name when the entity dies.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntitiesUnload(EntitiesUnloadEvent event) {
+        event.getEntities()
+             .stream()
+             .filter(LivingEntity.class::isInstance)
+             .map(LivingEntity.class::cast)
+             .forEach(this::clearDisplay);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        new ArrayList<>(event.getWorld()
+                             .getLivingEntities()).forEach(this::clearDisplay);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntityRemove(EntityRemoveEvent event) {
+        UUID id = event.getEntity()
+                       .getUniqueId();
+        candidates.remove(id);
+        removeDisplay(id);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        clearDisplay(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityDeath(EntityDeathEvent event) {
-        HOLOGRAPH_UTIL.cancelHologramFor(event.getEntity(), entitiesWithActiveHolographicCustomNames);
+        clearDisplay(event.getEntity());
+    }
+
+    private boolean isEligible(LivingEntity entity) {
+        return !(entity instanceof ArmorStand) && !(entity instanceof Player) && !entity.hasMetadata("NPC");
+    }
+
+    void replaceWithHologramIfNeeded(LivingEntity entity) {
+        if (!isEligible(entity) || !entity.isValid() || !isEnabled()) {
+            return;
+        }
+        UUID id = entity.getUniqueId();
+        candidates.add(id);
+        NameDisplay existing = activeNames.get(id);
+        if (existing != null && existing.stand.isValid()) {
+            refreshName(entity, existing);
+            return;
+        }
+        if (existing != null) {
+            removeDisplay(id);
+            restoreCustomNameVisibility(entity);
+        }
+        String name = entity.getCustomName();
+        if (name == null || !entity.isCustomNameVisible()) {
+            startHeartbeat();
+            return;
+        }
+
+        long generation = lifecycleGeneration;
+        ArmorStand stand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()), TEXT_UTIL.deserializeComponent(name));
+        // Do not publish a spawn whose synchronous handlers already replaced its owner.
+        if (!canPublishName(entity, generation)) {
+            HOLOGRAPH_UTIL.remove(stand);
+            return;
+        }
+        if (!stand.isValid()) {
+            candidates.remove(id);
+            return;
+        }
+        entity.getPersistentDataContainer()
+              .set(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN, true);
+        entity.setCustomNameVisible(false);
+        activeNames.put(id, new NameDisplay(stand, name));
+        HOLOGRAPH_UTIL.onCleanup(stand, () -> clearNameOwner(id));
+        startHeartbeat();
+    }
+
+    private boolean canPublishName(LivingEntity entity, long generation) {
+        UUID id = entity.getUniqueId();
+        return generation == lifecycleGeneration && candidates.contains(id) && !activeNames.containsKey(id) && entity.isValid() && isEligible(entity) && isEnabled();
+    }
+
+    private void clearNameOwner(UUID id) {
+        Entity loaded = Bukkit.getEntity(id);
+        if (loaded instanceof LivingEntity living) {
+            clearDisplay(living);
+        } else {
+            candidates.remove(id);
+            removeDisplay(id);
+        }
+    }
+
+    private void startHeartbeat() {
+        if (heartbeat == null && !candidates.isEmpty()) {
+            heartbeat = Bukkit.getScheduler()
+                              .runTaskTimer(DamageIndicator.getInstance(), this::tick, HEARTBEAT_PERIOD_TICKS, HEARTBEAT_PERIOD_TICKS);
+        }
+    }
+
+    private void tick() {
+        currentTick++;
+        if (!isEnabled()) {
+            shutdown();
+            return;
+        }
+        if (currentTick % HOLOGRAM_FOLLOW_SPEED.asInt() == 0) {
+            followNames();
+        }
+        if (currentTick % DISCOVERY_INTERVAL_TICKS == FIRST_DISCOVERY_TICK) {
+            discoverNames();
+        }
+        if (candidates.isEmpty() && activeNames.isEmpty()) {
+            stopHeartbeat();
+        }
+    }
+
+    private void followNames() {
+        new ArrayList<>(activeNames.keySet()).forEach(this::followName);
+    }
+
+    private void followName(UUID id) {
+        NameDisplay display = activeNames.get(id);
+        if (display == null) {
+            return;
+        }
+        Entity loaded = Bukkit.getEntity(id);
+        if (!(loaded instanceof LivingEntity entity) || !entity.isValid()) {
+            candidates.remove(id);
+            removeDisplay(id);
+        } else if (!display.stand.isValid()) {
+            removeDisplay(id);
+            restoreCustomNameVisibility(entity);
+        } else if (!isEligible(entity)) {
+            clearDisplay(entity);
+        } else {
+            refreshAndFollow(entity, display);
+        }
+    }
+
+    private void refreshAndFollow(LivingEntity entity, NameDisplay display) {
+        if (!refreshName(entity, display)) {
+            return;
+        }
+        if (!HOLOGRAPH_UTIL.teleportIfMoved(display.stand, HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()))) {
+            clearDisplay(entity);
+        }
     }
 
     /**
-     * Replaces a visible custom name with a holographic ArmorStand if needed.
-     *
-     * @param entity the living entity to check
+     * Rotate a bounded batch so late naming never requires a per-tick world scan.
      */
-    private void replaceWithHologramIfNeeded(LivingEntity entity) {
-        if (entity.hasMetadata("NPC") || entity instanceof ArmorStand) {
-            return;
+    private void discoverNames() {
+        long generation = lifecycleGeneration;
+        int batchSize = Math.min(candidates.size(), DISCOVERY_BATCH_SIZE);
+        ArrayList<UUID> batch = new ArrayList<>(batchSize);
+        for (int index = 0; index < batchSize; index++) {
+            batch.add(candidates.removeFirst());
         }
-        if (entitiesWithActiveHolographicCustomNames.containsKey(entity)) {
-            return;
+        for (UUID id : batch) {
+            if (generation != lifecycleGeneration) {
+                return;
+            }
+            Entity loaded = Bukkit.getEntity(id);
+            if (loaded instanceof LivingEntity entity && entity.isValid() && isEligible(entity)) {
+                candidates.add(id);
+                replaceWithHologramIfNeeded(entity);
+            } else {
+                removeDisplay(id);
+            }
         }
+    }
 
-        if (entity.isCustomNameVisible() && entity.customName() != null) {
+    private boolean refreshName(LivingEntity entity, NameDisplay display) {
+        String name = entity.getCustomName();
+        if (name == null) {
+            removeDisplay(entity.getUniqueId());
+            restoreCustomNameVisibility(entity);
+            return false;
+        }
+        if (!Objects.equals(name, display.name)) {
+            display.stand.setCustomName(name);
+            display.name = name;
+        }
+        if (entity.isCustomNameVisible()) {
             entity.setCustomNameVisible(false);
-            LivingEntityTaskInfo taskInfo = spawnHologram(entity, entity.customName());
-            entitiesWithActiveHolographicCustomNames.put(entity, taskInfo);
+        }
+        return true;
+    }
+
+    void restoreCustomNameVisibility(LivingEntity entity) {
+        if (Boolean.TRUE.equals(entity.getPersistentDataContainer()
+                                      .get(HIDDEN_CUSTOM_NAME_KEY, PersistentDataType.BOOLEAN))) {
+            entity.setCustomNameVisible(true);
+            entity.getPersistentDataContainer()
+                  .remove(HIDDEN_CUSTOM_NAME_KEY);
         }
     }
 
+    private void removeDisplay(UUID id) {
+        NameDisplay display = activeNames.remove(id);
+        if (display != null) {
+            HOLOGRAPH_UTIL.remove(display.stand);
+        }
+    }
+
+    public void clearDisplay(LivingEntity entity) {
+        candidates.remove(entity.getUniqueId());
+        removeDisplay(entity.getUniqueId());
+        restoreCustomNameVisibility(entity);
+        if (candidates.isEmpty() && activeNames.isEmpty()) {
+            stopHeartbeat();
+        }
+    }
+
+    private boolean isEnabled() {
+        return !stopped && ConfigKeys.ENABLE_HOLOGRAPHIC_CUSTOM_NAMES.asBoolean() && ConfigKeys.ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean();
+    }
+
     /**
-     * Creates and manages a holographic ArmorStand that follows the entity
-     * and displays the entity's original name as a floating tag.
-     *
-     * @param entity the entity the hologram should follow
-     * @param name the name to display above the entity
-     * @return task info for the created hologram
+     * Restore orphaned markers only; same-session displays retain visibility ownership.
      */
-    private LivingEntityTaskInfo spawnHologram(LivingEntity entity, Component name) {
-        final ArmorStand armorStand = HOLOGRAPH_UTIL.createArmorStandHologram(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()), name);
+    void recoverAndReplaceCustomName(LivingEntity entity) {
+        NameDisplay active = activeNames.get(entity.getUniqueId());
+        if (active != null && active.stand.isValid()) {
+            refreshName(entity, active);
+            return;
+        }
+        removeDisplay(entity.getUniqueId());
+        restoreCustomNameVisibility(entity);
+        replaceWithHologramIfNeeded(entity);
+    }
 
-        BukkitTask followTask = new BukkitRunnable() {
-
-            @Override
-            public synchronized void cancel() throws IllegalStateException {
-                if (armorStand.isValid()) {
-                    armorStand.remove();
-                } else {
-                    DamageIndicator.getInstance()
-                                   .getLogger()
-                                   .warning("Hologram task canceled: armor stand was already invalid.");
-                }
-                entitiesWithActiveHolographicCustomNames.remove(entity);
-                super.cancel();
+    public void shutdown() {
+        lifecycleGeneration++;
+        stopped = true;
+        stopHeartbeat();
+        for (UUID id : new ArrayList<>(activeNames.keySet())) {
+            Entity loaded = Bukkit.getEntity(id);
+            if (loaded instanceof LivingEntity entity) {
+                restoreCustomNameVisibility(entity);
             }
+            removeDisplay(id);
+        }
+        candidates.clear();
+    }
 
-            @Override
-            public void run() {
-                if (!entity.isValid() || !entity.getChunk()
-                                                .isEntitiesLoaded()) {
-                    cancel();
-                    return;
-                }
+    private void stopHeartbeat() {
+        if (heartbeat != null) {
+            heartbeat.cancel();
+            heartbeat = null;
+        }
+    }
 
-                if (armorStand.isValid()) {
-                    armorStand.teleport(HOLOGRAPH_UTIL.locationAboveEntity(entity, HOLOGRAM_NAME_POSITION.asDouble()));
-                }
-            }
-        }.runTaskTimer(DamageIndicator.getInstance(), 2, HOLOGRAM_FOLLOW_SPEED.asInt());
+    public void refreshLoadedEntities() {
+        stopped = false;
+        Bukkit.getWorlds()
+              .forEach(world -> world.getLivingEntities()
+                                     .forEach(this::recoverAndReplaceCustomName));
+    }
 
-        return new LivingEntityTaskInfo(followTask, armorStand);
+    public void restorePersistedNames() {
+        Bukkit.getWorlds()
+              .forEach(world -> world.getLivingEntities()
+                                     .stream()
+                                     .filter(entity -> !activeNames.containsKey(entity.getUniqueId()))
+                                     .forEach(this::restoreCustomNameVisibility));
+    }
+
+    private static final class NameDisplay {
+
+        private final ArmorStand stand;
+        private String name;
+
+        private NameDisplay(ArmorStand stand, String name) {
+            this.stand = stand;
+            this.name = name;
+        }
     }
 }

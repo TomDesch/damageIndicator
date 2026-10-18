@@ -2,6 +2,7 @@ package io.github.stealingdapenta.damageindicator.utils;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Set;
 import org.bukkit.entity.Entity;
 
 /**
@@ -13,8 +14,20 @@ public class AttackerVictimPair {
     private final UUID victimId;
 
     public AttackerVictimPair(Entity attacker, Entity victim) {
-        this.attackerId = attacker != null ? attacker.getUniqueId() : null;
-        this.victimId = victim.getUniqueId();
+        this(attacker != null ? attacker.getUniqueId() : null, victim.getUniqueId());
+    }
+
+    public AttackerVictimPair(UUID attackerId, UUID victimId) {
+        this.attackerId = attackerId;
+        this.victimId = Objects.requireNonNull(victimId);
+    }
+
+    public boolean involves(UUID entityId) {
+        return Objects.equals(attackerId, entityId) || Objects.equals(victimId, entityId);
+    }
+
+    public boolean involvesAny(Set<UUID> entityIds) {
+        return entityIds.contains(victimId) || attackerId != null && entityIds.contains(attackerId);
     }
 
     @Override
@@ -34,4 +47,3 @@ public class AttackerVictimPair {
         return Objects.hash(attackerId, victimId);
     }
 }
-
