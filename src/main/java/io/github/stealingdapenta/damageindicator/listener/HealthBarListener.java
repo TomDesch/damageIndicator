@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
@@ -64,6 +64,8 @@ public class HealthBarListener implements Listener {
     private final Map<UUID, ActiveBar> activeBars = new HashMap<>();
     private final Set<UUID> pendingRefreshes = new HashSet<>();
     private final Set<UUID> pendingRecoveries = new HashSet<>();
+    private HealthBarAppearance cachedAppearance;
+    private String[] cachedBars;
     private BukkitTask heartbeat;
     private long currentTick;
     private long lifecycleGeneration;
@@ -212,7 +214,7 @@ public class HealthBarListener implements Listener {
             clearDisplay(entity, false);
             return;
         }
-        String name = TEXT_UTIL.serializeComponent(createHealthBar(Math.clamp(health, 0, max), max));
+        String name = createHealthBar(Math.clamp(health, 0, max), max);
         bar.nextFollow = currentTick + HOLOGRAM_FOLLOW_SPEED.asInt();
         if (ENABLE_HOLOGRAM_HEALTH_BAR.asBoolean()) {
             renderHologram(entity, bar, name);
@@ -458,6 +460,8 @@ public class HealthBarListener implements Listener {
     public void shutdown() {
         lifecycleGeneration++;
         stopped = true;
+        cachedAppearance = null;
+        cachedBars = null;
         if (heartbeat != null) {
             heartbeat.cancel();
             heartbeat = null;
@@ -508,13 +512,23 @@ public class HealthBarListener implements Listener {
                                      .forEach(this::recover));
     }
 
-    private Component createHealthBar(double current, double max) {
-        int total = HEALTH_BAR_LENGTH.asInt();
-        int alive = countAliveSymbols(current, max, total);
-        return HEALTH_BAR_PREFIX.asFormattedString()
-                                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), alive))
-                                .append(TEXT_UTIL.repeatTextWithStyles(HEALTH_BAR_DEAD_SYMBOL.asFormattedString(), total - alive))
-                                .append(HEALTH_BAR_SUFFIX.asFormattedString());
+    private String createHealthBar(double current, double max) {
+        HealthBarAppearance appearance = new HealthBarAppearance(HEALTH_BAR_LENGTH.asInt(), HEALTH_BAR_PREFIX.asFormattedString(),
+                                                                HEALTH_BAR_ALIVE_SYMBOL.asFormattedString(), HEALTH_BAR_DEAD_SYMBOL.asFormattedString(),
+                                                                HEALTH_BAR_SUFFIX.asFormattedString());
+        // Compare component contents as well as styles; standalone config access can change without a reload.
+        if (!appearance.equals(cachedAppearance)) {
+            cachedAppearance = appearance;
+            cachedBars = new String[appearance.length() + 1];
+        }
+        int alive = countAliveSymbols(current, max, appearance.length());
+        if (cachedBars[alive] == null) {
+            cachedBars[alive] = TEXT_UTIL.serializeComponent(appearance.prefix()
+                                                                     .append(TEXT_UTIL.repeatTextWithStyles(appearance.aliveSymbol(), alive))
+                                                                     .append(TEXT_UTIL.repeatTextWithStyles(appearance.deadSymbol(), appearance.length() - alive))
+                                                                     .append(appearance.suffix()));
+        }
+        return cachedBars[alive];
     }
 
     private int countAliveSymbols(double current, double max, int length) {
@@ -523,6 +537,10 @@ public class HealthBarListener implements Listener {
         }
         int rounded = (int) Math.round(current / max * length);
         return Math.clamp(rounded, 1, length);
+    }
+
+    private record HealthBarAppearance(int length, TextComponent prefix, TextComponent aliveSymbol, TextComponent deadSymbol,
+                                       TextComponent suffix) {
     }
 
     private static final class ActiveBar {

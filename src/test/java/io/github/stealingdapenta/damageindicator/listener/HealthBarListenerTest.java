@@ -275,6 +275,98 @@ class HealthBarListenerTest {
     }
 
     @Test
+    void roundedHealthBucketsShareExactStyledTextAcrossDifferentMaximumHealth() {
+        config.set("health_bar_length", 4);
+        config.set("health_bar_prefix", " &(18,52,86)&b[");
+        config.set("health_bar_suffix", "&(7,8,9)&s] ");
+        config.set("health_bar_alive_symbol", "&(1,2,3)&u+&r.");
+        config.set("health_bar_dead_symbol", "&(4,5,6)&i-&r_");
+        String prefix = " \u00a7x\u00a71\u00a72\u00a73\u00a74\u00a75\u00a76\u00a7l[";
+        String alive = "\u00a7x\u00a70\u00a71\u00a70\u00a72\u00a70\u00a73\u00a7n+\u00a7f.";
+        String dead = "\u00a7x\u00a70\u00a74\u00a70\u00a75\u00a70\u00a76\u00a7o-\u00a7f_";
+        String suffix = "\u00a7x\u00a70\u00a77\u00a70\u00a78\u00a70\u00a79\u00a7m] ";
+        Model first = mob("First original");
+        Model second = mob("Second original");
+        first.health = 7.5;
+        second.health = 37.5;
+        second.maximumHealth = 100;
+
+        damage(first, 1);
+        damage(second, 1);
+
+        assertEquals(prefix + alive.repeat(2) + dead.repeat(2) + suffix, first.name);
+        assertSame(first.name, second.name);
+        for (double[] sample : new double[][]{{0, 20, 0}, {0.01, 20, 1}, {7.49, 20, 1}, {7.5, 20, 2}, {37.5, 100, 2}, {100, 20, 4}}) {
+            first.health = sample[0];
+            first.maximumHealth = sample[1];
+            int aliveCount = (int) sample[2];
+            damage(first, 1);
+            assertEquals(prefix + alive.repeat(aliveCount) + dead.repeat(4 - aliveCount) + suffix, first.name);
+            if (aliveCount == 2) {
+                assertSame(second.name, first.name);
+            }
+        }
+    }
+
+    @Test
+    void appearanceChangesInvalidateAllStyledComponentsAndLengthWithoutReplacingConfig() {
+        config.set("health_bar_prefix", "P");
+        config.set("health_bar_suffix", "S");
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 1);
+        String original = "PAAAAADDDDDS";
+        assertEquals(original, mob.name);
+
+        for (String[] change : new String[][]{
+            {"health_bar_prefix", "Q", "QAAAAADDDDDS"},
+            {"health_bar_prefix", " P", " PAAAAADDDDDS"},
+            {"health_bar_prefix", "&bP", "\u00a7lPAAAAADDDDDS"},
+            {"health_bar_suffix", "&uS", "PAAAAADDDDD\u00a7nS"},
+            {"health_bar_alive_symbol", "&bA", "P\u00a7lAAAAA\u00a7rDDDDDS"},
+            {"health_bar_dead_symbol", "&(1,2,3)D", "PAAAAA\u00a7x\u00a70\u00a71\u00a70\u00a72\u00a70\u00a73DDDDD\u00a7rS"},
+            {"health_bar_alive_symbol", "B", "PBBBBBDDDDDS"},
+            {"health_bar_dead_symbol", "X", "PAAAAAXXXXXS"}
+        }) {
+            String previous = config.getString(change[0]);
+            config.set(change[0], change[1]);
+            damage(mob, 1);
+            assertEquals(change[2], mob.name, change[0] + "=" + change[1]);
+            config.set(change[0], previous);
+            damage(mob, 1);
+            assertEquals(original, mob.name);
+        }
+        config.set("health_bar_length", 6);
+        damage(mob, 1);
+        assertEquals("PAAADDDS", mob.name);
+    }
+
+    @Test
+    void sameListenerReloadRendersNewAppearanceAndStillRestoresTheExternalName() {
+        alwaysVisible();
+        Model mob = mob("Original");
+        mob.health = 10;
+        damage(mob, 1);
+        mob.name = "Name tag";
+        mob.visible = false;
+        advance(FOLLOW_INTERVAL_TICKS);
+        assertEquals("AAAAADDDDD", mob.name);
+        listener.shutdown();
+        assertEquals("Name tag", mob.name);
+
+        config.set("health_bar_prefix", "New ");
+        config.set("health_bar_length", 4);
+        config.set("health_bar_alive_symbol", "X");
+        config.set("health_bar_dead_symbol", "Y");
+        listener.refreshPersistedHolograms();
+
+        assertEquals("New XXYY", mob.name);
+        listener.shutdown();
+        assertEquals("Name tag", mob.name);
+        assertFalse(mob.visible);
+    }
+
+    @Test
     void externalNamesBecomeTheNewOriginalBeforeRedrawOrReset() {
         Model mob = mob("Old");
         damage(mob, 2);
@@ -395,7 +487,12 @@ class HealthBarListenerTest {
         damage(mob, 10);
         assertEquals(1, stands.size());
         assertEquals("AAAAADDDDD", stands.getFirst().name);
-        advance(19);
+        mob.location.add(2, 0, 0);
+        advance(7);
+        assertEquals(mob.location.getX(), stands.getFirst().location.getX());
+        assertEquals("AAAAADDDDD", stands.getFirst().name);
+        assertEquals(1, stands.size());
+        advance(12);
         assertTrue(stands.getFirst().valid);
         advance(1);
         assertFalse(stands.getFirst().valid);
