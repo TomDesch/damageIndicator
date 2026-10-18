@@ -484,10 +484,8 @@ public class DamageIndicatorListener implements Listener {
                 release(pair);
             }
         }
-        for (UUID id : new ArrayList<>(animations.keySet())) {
-            if (ids.contains(id)) {
-                removeAnimation(id);
-            }
+        for (UUID id : ids) {
+            removeAnimation(id);
         }
     }
 

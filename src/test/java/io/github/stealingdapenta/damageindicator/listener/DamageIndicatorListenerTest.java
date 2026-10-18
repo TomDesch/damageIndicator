@@ -211,6 +211,41 @@ class DamageIndicatorListenerTest {
     }
 
     @Test
+    void targetedAnimationUnloadIsReentrantAndOtherHitsKeepMovingUntilExpiry() {
+        LivingEntity victim = victim();
+        hit(victim, null, 1);
+        hit(victim, null, 2);
+        hit(victim, null, 3);
+        Model first = stands.getFirst();
+        Model second = stands.get(1);
+        Model survivor = stands.getLast();
+        advance(1);
+        double previousY = survivor.location.getY();
+        EntitiesUnloadEvent unload = new EntitiesUnloadEvent(mock(Chunk.class), List.of(first.entity, second.entity));
+        fixture.onRemove = entity -> {
+            listener.onEntityRemove(new EntityRemoveEvent(entity, EntityRemoveEvent.Cause.PLUGIN));
+            if (entity == first.entity) {
+                listener.onEntitiesUnload(unload);
+            }
+        };
+
+        assertDoesNotThrow(() -> listener.onEntitiesUnload(unload));
+        listener.onEntityRemove(new EntityRemoveEvent(victim, EntityRemoveEvent.Cause.PLUGIN));
+        advance(1);
+
+        assertFalse(first.valid);
+        assertFalse(second.valid);
+        verify(first.entity).remove();
+        verify(second.entity).remove();
+        assertTrue(survivor.valid);
+        assertTrue(survivor.location.getY() > previousY);
+        assertEquals(3, stands.size());
+        advance(MERGE_TIMEOUT_TICKS - 2);
+        assertFalse(survivor.valid);
+        assertTrue(fixture.clock.allCancelled());
+    }
+
+    @Test
     void dispenserProjectileHitRemovalReleasesTheNumberInsteadOfDeletingIt() {
         Projectile arrow = mock(Projectile.class);
         var dispenser = mock(BlockProjectileSource.class);
